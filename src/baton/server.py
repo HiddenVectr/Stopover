@@ -102,15 +102,17 @@ class HostAllowlist:
 
 class Authentication:
     """Run the configured authenticator for /mcp and /api/* and attach the resulting RequestContext."""
-    def __init__(self, app, auth: Authenticator | None):
-        self.app, self.auth = app, auth
+    def __init__(self, app, auth: Authenticator | None, login_url: str | None = None):
+        self.app, self.auth, self.login_url = app, auth, login_url
 
     async def __call__(self, scope, receive, send):
         if self.auth and scope["type"] == "http" and (scope["path"] == "/mcp" or scope["path"].startswith("/api/")):
             ctx = await self.auth(Request(scope))
             if ctx is None:
-                return await JSONResponse({"error": "Authentication required"}, status_code=401,
-                                          headers={"www-authenticate": "Bearer"})(scope, receive, send)
+                body = {"error": "Authentication required"}
+                if self.login_url and scope["path"].startswith("/api/"):
+                    body["login_url"] = self.login_url  # The dashboard redirects here to sign in.
+                return await JSONResponse(body, status_code=401, headers={"www-authenticate": "Bearer"})(scope, receive, send)
             scope.setdefault("state", {})["handoff_ctx"] = ctx
         await self.app(scope, receive, send)
 
@@ -168,11 +170,13 @@ class RequestBoundary:
 
 def create_app(directory=None, *, service: BatonService | None = None, auth: Authenticator | None = None,
                allowed_hosts: Iterable[str] | None = None, extra_routes: Iterable[BaseRoute] = (),
-               middleware: Iterable[Middleware] = ()):
+               middleware: Iterable[Middleware] = (), login_url: str | None = None):
     """Build the HTTP app.
 
     The local deployment calls this with no arguments. A hosted build passes its own service (backend and registry),
     an authenticator that maps requests to a RequestContext, its allowed hosts, and any extra routes or middleware.
+    With login_url, unauthenticated dashboard API calls return it so the dashboard can redirect to sign in; a host can
+    also serve GET /api/session ({"user": {...}, "workspace": {...}, "logout_url": ...}) to show the signed-in account.
     """
     if service is None:
         directory = directory or env("DATA_DIR", "/data")
@@ -257,7 +261,7 @@ def create_app(directory=None, *, service: BatonService | None = None, auth: Aut
               Route("/mcp", MCPRoute(manager)), *extra_routes, Mount("/assets", app=StaticFiles(directory=STATIC))]
     # The first middleware is outermost: reject unknown hosts, then bound bodies, then authenticate.
     stack = [Middleware(HostAllowlist, allowed_hosts=allowed_hosts), Middleware(RequestBoundary),
-             Middleware(Authentication, auth=auth), *middleware]
+             Middleware(Authentication, auth=auth, login_url=login_url), *middleware]
     app = Starlette(routes=routes, middleware=stack, lifespan=lifespan)
     app.state.store = app.state.service = service
     return app

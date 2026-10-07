@@ -107,3 +107,12 @@ def test_registry_extension_adds_tools_without_touching_core(tmp_path):
 def test_service_layer_never_touches_sqlite(module):
     source = inspect.getsource(module)
     assert "sqlite" not in source.lower() and "db.execute" not in source
+
+
+def test_login_url_is_returned_for_dashboard_api_but_not_mcp(tmp_path):
+    async def deny(request):
+        return None
+
+    with TestClient(create_app(tmp_path, auth=deny, login_url="/auth/login"), base_url="http://127.0.0.1:8765") as client:
+        assert client.get("/api/handoffs").json() == {"error": "Authentication required", "login_url": "/auth/login"}
+        assert "login_url" not in mcp_call(client, "baton_list", {}).json()
