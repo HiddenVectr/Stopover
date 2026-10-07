@@ -60,9 +60,13 @@ function requireSignIn() {
   if (!$('signin-dialog').open) { $('signin-error').hidden = true; $('signin-dialog').showModal(); $('signin-token').focus(); }
 }
 
+let redirectingToLogin = false;
 function goToLogin(loginUrl) {
   const target = new URL(loginUrl, location.origin);
   if (target.origin !== location.origin) return false;  // Only follow same-origin login pages.
+  // Several requests can fail at once; start a single sign-in so its state cookie matches the redirect.
+  if (redirectingToLogin) return true;
+  redirectingToLogin = true;
   target.searchParams.set('return_to', location.pathname + location.search);
   location.assign(target.href);
   return true;

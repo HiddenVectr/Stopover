@@ -2,7 +2,7 @@ name: baton
 services:
   baton:
     build: .
-    image: baton:0.8.0
+    image: baton:0.8.1
     container_name: baton
     restart: unless-stopped
     ports:
