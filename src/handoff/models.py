@@ -269,33 +269,45 @@ class Delete(Model):
     id: UUID
 
 
-MemoryKey = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True,
+def _not_bool(value):
+    # Lax ints accept numeric strings; booleans are almost always a mistake for revisions.
+    if isinstance(value, bool):
+        raise ValueError("must be an integer revision, not a boolean")
+    return value
+
+
+MemoryKey = Annotated[str, BeforeValidator(_slug), StringConstraints(strip_whitespace=True, to_lower=True,
     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$")]
 MemoryCategory = Literal["fact", "preference", "habit", "goal", "project_context"]
 MemoryText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
-Revision = Annotated[int, Field(ge=0, strict=True)]
+Revision = Annotated[int, BeforeValidator(_not_bool), Field(ge=0)]
 
 
 class MemoryEntry(Model):
     key: MemoryKey = Field(description="Stable topic key, e.g. communication.response_length. Reuse the existing key when correcting a memory.")
-    expected_revision: Revision = Field(description="0 for a new key; otherwise the revision returned by handoff_memory_read. Deleted keys cannot be recreated.")
+    expected_revision: Revision = Field(description="0 for a new key; otherwise the revision returned by handoff_memory_read (for a forgotten key, its deletion-marker revision together with recreate=true).")
     content: MemoryText
     category: MemoryCategory = "fact"
     basis: Literal["stated", "observed", "inferred"] = "stated"
-    source: Source = Field(description="Original evidence source, preserved across harness imports; do not relabel imported knowledge as a new observation.")
+    source: Source | None = Field(default=None, description="Original evidence source; defaults to the updating client. Kept unchanged when the content is unchanged.")
     evidence: Annotated[str, StringConstraints(max_length=2048)] = ""
+    recreate: bool = Field(default=False, description="Re-establish a forgotten key. Only when the user has just freshly stated this memory, never from an old copy.")
 
 
 class MemoryUpdate(Model):
-    operation_id: UUID
+    operation_id: UUID | None = None
     client: Short = Field(description="Harness making this update, e.g. codex or claude-code.")
     memories: list[MemoryEntry] = Field(min_length=1, max_length=50)
+    partial: bool = Field(default=False, description="Apply entries that do not conflict and report the rest as action=conflict, instead of rejecting the whole batch.")
     coverage: Coverage = Field(default_factory=Coverage)
 
     @model_validator(mode="after")
     def unique_bounded(self):
         if len({m.key for m in self.memories}) != len(self.memories):
             raise ValueError("Memory keys must be unique within a batch")
+        for memory in self.memories:
+            if memory.source is None:
+                memory.source = Source(client=self.client)
         bounded_json(self.model_dump(mode="json"), 49152)
         return self
 
@@ -312,11 +324,11 @@ class MemoryRead(Model):
 
 class MemoryForgetItem(Model):
     key: MemoryKey
-    expected_revision: Annotated[int, Field(ge=1, strict=True)]
+    expected_revision: Annotated[int, BeforeValidator(_not_bool), Field(ge=1)] | None = None
 
 
 class MemoryForget(Model):
-    operation_id: UUID
+    operation_id: UUID | None = None
     memories: list[MemoryForgetItem] = Field(min_length=1, max_length=50)
 
     @model_validator(mode="after")

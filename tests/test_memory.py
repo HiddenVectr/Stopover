@@ -110,8 +110,10 @@ def test_pagination_filters_changes_and_export(store):
     assert success(store, 'read', {'category': 'habit'})['items'] == []
     assert store.execute('handoff_memory_read', {'cursor': first['next_cursor'], 'q': 'different'})['error']['code'] == 'INVALID_CURSOR'
     success(store, 'update', update(entry('topic.12', 'Changed memory', revision=13)))
-    assert store.execute('handoff_memory_read', {'cursor': first['next_cursor']})['error']['code'] == 'STALE_CURSOR'
-    changes = success(store, 'read', {'since_revision': 25})
+    # Pagination continues across writes; every page reports the first page's checkpoint.
+    continued = success(store, 'read', {'limit': 20, 'cursor': first['next_cursor']})
+    assert len(first['items'] + continued['items']) == 25 and continued['store_revision'] == first['store_revision'] == 25
+    changes = success(store, 'read', {'since_revision': continued['store_revision']})
     assert [m['content'] for m in changes['items']] == ['Changed memory']
     exported = success(store, 'export', {'format': 'markdown', 'limit': 50})
     assert exported['schema_version'] == '1.0' and exported['complete']
@@ -131,7 +133,6 @@ def test_invalid_cursors_are_errors(store, cursor):
     lambda a: a['memories'][0].update(key='../escape'),
     lambda a: a['memories'].append(copy.deepcopy(a['memories'][0])),
     lambda a: a.update(user_id='another-user'),
-    lambda a: a.pop('operation_id'),
     lambda a: a.update(memories=[entry(f'key.{i}', 'x' * 4096) for i in range(15)]),
 ])
 def test_strict_validation(store, change):
@@ -193,7 +194,9 @@ async def test_memory_http_stdio_round_trip(live_server):
                 assert tools['handoff_memory_read'].annotations.readOnlyHint
                 assert tools['handoff_memory_export'].annotations.readOnlyHint
                 assert tools['handoff_memory_forget'].annotations.destructiveHint
-                assert 'ALL' in tools['handoff_memory_update'].description
+                assert all(len(tools[name].description) < 1000 for name in tools if 'memory' in name)
+                assert not tools['handoff_memory_update'].annotations.destructiveHint
+                assert 'ALL' in (await codex.get_prompt('memory-update')).messages[0].content.text
                 saved = await codex.call_tool('handoff_memory_update', update(entry()))
                 assert not saved.isError
                 params = StdioServerParameters(command=sys.executable,
@@ -212,3 +215,57 @@ async def test_memory_http_stdio_round_trip(live_server):
                 imported = await codex.call_tool('handoff_memory_read', {'since_revision': 1})
                 assert imported.structuredContent['data']['items'][0]['content'] == 'Prefers examples.'
                 assert (await codex.call_tool('handoff_memory_export', {'format': 'markdown'})).structuredContent['data']['complete']
+
+
+def test_resync_keeps_original_provenance(store):
+    def entry(content='Prefers concise answers.', revision=0, **overrides):
+        return {**globals()['entry'](content=content, revision=revision), **overrides}
+    success(store, 'update', update(entry()))
+    resync = update(entry(revision=1, source={'client': 'claude-code'}, evidence='Imported from codex'), client='claude-code')
+    assert success(store, 'update', resync)['items'][0]['action'] == 'unchanged'
+    current = success(store, 'read')['items'][0]
+    assert current['source']['client'] == 'codex' and current['revision'] == 1
+    recategorised = update(entry(revision=1, category='habit', source={'client': 'claude-code'}), client='claude-code')
+    assert success(store, 'update', recategorised)['items'][0]['action'] == 'updated'
+    current = success(store, 'read')['items'][0]
+    assert current['category'] == 'habit' and current['source']['client'] == 'codex' and current['updated_by'] == 'claude-code'
+    changed = update(entry(content='Prefers bullet points.', revision=2, source={'client': 'claude-code'}), client='claude-code')
+    success(store, 'update', changed)
+    assert success(store, 'read')['items'][0]['source']['client'] == 'claude-code'
+
+
+def test_conflicts_are_all_reported_and_partial_applies_the_rest(store):
+    success(store, 'update', update(entry('a.one'), entry('a.two')))
+    stale = update(entry('a.one', 'New one'), entry('a.two', 'New two'), entry('a.three', 'Three'))
+    error = store.execute('handoff_memory_update', stale)['error']
+    assert error['code'] == 'REVISION_CONFLICT'
+    assert {c['key']: c['current_revision'] for c in error['conflicts']} == {'a.one': 1, 'a.two': 2}
+    assert 'a.one' in error['message'] and 'a.two' in error['message']
+    assert len(success(store, 'read')['items']) == 2
+    stale['partial'] = True
+    stale['operation_id'] = str(uuid.uuid4())
+    result = success(store, 'update', stale)
+    assert [(i['key'], i['action']) for i in result['items']] == [('a.one', 'conflict'), ('a.two', 'conflict'), ('a.three', 'added')]
+    assert result['items'][0]['code'] == 'REVISION_CONFLICT' and result['store_revision'] == 3
+
+
+def test_forgotten_key_can_be_recreated_explicitly(store):
+    success(store, 'update', update(entry()))
+    success(store, 'forget', {'memories': [{'key': 'communication.length'}]})
+    old_id = success(store, 'read', {'include_deleted': True})['items'][0]['id']
+    blocked = store.execute('handoff_memory_update', update(entry(content='Now prefers detail.', revision=2)))['error']
+    assert blocked['code'] == 'MEMORY_DELETED' and 'recreate=true' in blocked['message']
+    recreated = success(store, 'update', update(entry(content='Now prefers detail.', revision=2, recreate=True)))
+    assert recreated['items'][0]['action'] == 'recreated' and recreated['items'][0]['id'] != old_id
+    current = success(store, 'read')['items'][0]
+    assert current['content'] == 'Now prefers detail.' and not current['deleted']
+    assert success(store, 'read', {'since_revision': 2})['items'][0]['content'] == 'Now prefers detail.'
+
+
+def test_lenient_memory_inputs(store):
+    minimal = {'client': 'cursor', 'memories': [{'key': 'Editor Choice', 'content': 'Uses Neovim', 'expected_revision': '0'}]}
+    saved = success(store, 'update', minimal)
+    assert saved['items'][0]['key'] == 'editor-choice'
+    current = success(store, 'read')['items'][0]
+    assert current['source']['client'] == 'cursor' and current['category'] == 'fact'
+    assert success(store, 'forget', {'memories': [{'key': 'editor-choice'}]})['items'][0]['action'] == 'deleted'

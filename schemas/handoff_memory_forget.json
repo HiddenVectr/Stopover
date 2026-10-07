@@ -4,19 +4,25 @@
       "additionalProperties": false,
       "properties": {
         "key": {
-          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$",
           "title": "Key",
           "type": "string"
         },
         "expected_revision": {
-          "minimum": 1,
-          "title": "Expected Revision",
-          "type": "integer"
+          "anyOf": [
+            {
+              "ge": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
         }
       },
       "required": [
-        "key",
-        "expected_revision"
+        "key"
       ],
       "title": "MemoryForgetItem",
       "type": "object"
@@ -25,9 +31,17 @@
   "additionalProperties": false,
   "properties": {
     "operation_id": {
-      "format": "uuid",
-      "title": "Operation Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
     },
     "memories": {
       "items": {
@@ -40,7 +54,6 @@
     }
   },
   "required": [
-    "operation_id",
     "memories"
   ],
   "title": "MemoryForget",

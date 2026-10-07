@@ -115,9 +115,11 @@ def test_personal_memories_browse_search_refresh_and_mobile(live_server):
         expect(page.locator('#memory-detail')).to_contain_text('claude-code')
         page.set_viewport_size({'width': 390, 'height': 844})
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        page.screenshot(path='/tmp/handoff-memory-mobile.png', full_page=True)
+        screenshots = Path(os.environ.get('HANDOFF_SCREENSHOT_DIR', '/tmp/handoff-screenshots'))
+        screenshots.mkdir(parents=True, exist_ok=True)
+        page.screenshot(path=str(screenshots / 'memory-mobile.png'), full_page=True)
         page.set_viewport_size({'width': 1440, 'height': 1000})
-        page.screenshot(path='/tmp/handoff-memory-desktop.png', full_page=True)
+        page.screenshot(path=str(screenshots / 'memory-desktop.png'), full_page=True)
         with ThreadPoolExecutor(max_workers=1) as pool:
             pool.submit(lambda: asyncio.run(call_remote(url + '/mcp', 'handoff_memory_forget', forget('personal.topic00', 26)))).result()
         page.locator('#memory-refresh').click()

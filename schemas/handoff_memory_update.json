@@ -27,13 +27,12 @@
       "properties": {
         "key": {
           "description": "Stable topic key, e.g. communication.response_length. Reuse the existing key when correcting a memory.",
-          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$",
           "title": "Key",
           "type": "string"
         },
         "expected_revision": {
-          "description": "0 for a new key; otherwise the revision returned by handoff_memory_read. Deleted keys cannot be recreated.",
-          "minimum": 0,
+          "description": "0 for a new key; otherwise the revision returned by handoff_memory_read (for a forgotten key, its deletion-marker revision together with recreate=true).",
+          "ge": 0,
           "title": "Expected Revision",
           "type": "integer"
         },
@@ -66,21 +65,34 @@
           "type": "string"
         },
         "source": {
-          "$ref": "#/$defs/Source",
-          "description": "Original evidence source, preserved across harness imports; do not relabel imported knowledge as a new observation."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Source"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Original evidence source; defaults to the updating client. Kept unchanged when the content is unchanged."
         },
         "evidence": {
           "default": "",
           "maxLength": 2048,
           "title": "Evidence",
           "type": "string"
+        },
+        "recreate": {
+          "default": false,
+          "description": "Re-establish a forgotten key. Only when the user has just freshly stated this memory, never from an old copy.",
+          "title": "Recreate",
+          "type": "boolean"
         }
       },
       "required": [
         "key",
         "expected_revision",
-        "content",
-        "source"
+        "content"
       ],
       "title": "MemoryEntry",
       "type": "object"
@@ -164,9 +176,17 @@
   "additionalProperties": false,
   "properties": {
     "operation_id": {
-      "format": "uuid",
-      "title": "Operation Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
     },
     "client": {
       "description": "Harness making this update, e.g. codex or claude-code.",
@@ -184,12 +204,17 @@
       "title": "Memories",
       "type": "array"
     },
+    "partial": {
+      "default": false,
+      "description": "Apply entries that do not conflict and report the rest as action=conflict, instead of rejecting the whole batch.",
+      "title": "Partial",
+      "type": "boolean"
+    },
     "coverage": {
       "$ref": "#/$defs/Coverage"
     }
   },
   "required": [
-    "operation_id",
     "client",
     "memories"
   ],

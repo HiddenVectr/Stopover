@@ -38,9 +38,9 @@ def normalized(text):
 
 
 class DomainError(Exception):
-    def __init__(self, code, message, revision=None):
+    def __init__(self, code, message, revision=None, details=None):
         super().__init__(message)
-        self.code, self.revision = code, revision
+        self.code, self.revision, self.details = code, revision, details
 
 
 class OwnerLock:
@@ -183,7 +183,7 @@ class Store:
             problems = [f'{".".join(map(str, e["loc"])) or "request"}: {e["msg"][:200]}' for e in exc.errors(include_input=False)]
             return self._error("VALIDATION_ERROR", "; ".join(problems[:8]))
         except DomainError as exc:
-            return self._error(exc.code, str(exc), exc.revision)
+            return self._error(exc.code, str(exc), exc.revision, exc.details)
         except (ValueError, TypeError):
             return self._error("VALIDATION_ERROR", "Invalid or oversized request")
         except sqlite3.Error as exc:
@@ -194,10 +194,12 @@ class Store:
                 return self._error("STORE_FULL", "The local store is full")
             return self._error("STORE_UNAVAILABLE", "The local store could not complete this request")
 
-    def _error(self, code, message, revision=None):
+    def _error(self, code, message, revision=None, details=None):
         error = {"code": code, "message": message, "retryable": code in ("STORE_BUSY", "STORE_UNAVAILABLE")}
         if revision is not None:
             error["current_revision"] = revision
+        if details:
+            error.update(details)
         return {"ok": False, "error": error, "server_time": utc(self.clock())}
 
     def _row(self, handoff_id):

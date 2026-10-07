@@ -4,7 +4,6 @@
     "key": {
       "anyOf": [
         {
-          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$",
           "type": "string"
         },
         {
@@ -42,7 +41,7 @@
     "since_revision": {
       "anyOf": [
         {
-          "minimum": 0,
+          "ge": 0,
           "type": "integer"
         },
         {
