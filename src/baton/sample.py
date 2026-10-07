@@ -5,7 +5,7 @@ def sample_record(source="codex", target="claude-code"):
         "source": {"client": source, "authoring_method": "human_summary", "transfer_method": "local_test"},
         "coverage": {"basis": "A synthetic welcome handoff for testing the local MCP connection.", "omitted": []},
         "context": {
-            "objective": "Confirm that a fresh agent can recover context from the shared Handoff inbox.",
+            "objective": "Confirm that a fresh agent can recover context from the shared Baton inbox.",
             "background": "Both Claude Code and Codex connect to the same Docker service. The webpage displays that service's records.",
             "current_state": "The local service is running. This sample is ready for either agent to read and claim. No application code needs changing.",
             "constraints": ["Keep this test local.", "Do not edit project files or call external services for this test."],

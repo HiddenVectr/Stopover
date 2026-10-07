@@ -3,9 +3,9 @@ requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "handoff-local"
-version = "0.4.0"
-description = "A local MCP inbox for carrying work between AI agents"
+name = "baton-inbox"
+version = "0.5.0"
+description = "Baton: a shared MCP inbox for handing work and memory between AI agents"
 requires-python = ">=3.10"
 dependencies = ["mcp>=1.26,<2", "pydantic>=2.11,<3", "starlette>=0.48,<1", "uvicorn>=0.35,<1", "httpx>=0.28,<1", "anyio>=4.5,<5"]
 
@@ -13,13 +13,13 @@ dependencies = ["mcp>=1.26,<2", "pydantic>=2.11,<3", "starlette>=0.48,<1", "uvic
 test = ["pytest>=8,<10", "pytest-asyncio>=1,<2", "playwright>=1.50,<2"]
 
 [project.scripts]
-handoff = "handoff.__main__:main"
+baton = "baton.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-handoff = ["static/*"]
+baton = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

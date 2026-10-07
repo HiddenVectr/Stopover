@@ -1,10 +1,10 @@
 # Implementation notes
 
-Handoff exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. The original proposal is historical. A Host allowlist (loopback names and `*.ts.net` by default, extended with `HANDOFF_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
+Baton exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. The original proposal is historical. A Host allowlist (loopback names and `*.ts.net` by default, extended with `BATON_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
 
 The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same eleven tool schemas and five prompts and preserve structured results and MCP error flags.
 
-Natural-language upload guidance is included in both the server initialization instructions and the `handoff_push` tool description, so the save workflow is described even when a harness exposes tool descriptions without the server-level instructions. A short save request is enough: the agent builds a contextual summary, leaves the recipient unspecified by default, and returns the saved ID only after success. The MCP receives the summary the agent submits; it cannot read the conversation itself. Model compliance and summary quality still depend on the harness and available context.
+Natural-language upload guidance is included in both the server initialization instructions and the `baton_push` tool description, so the save workflow is described even when a harness exposes tool descriptions without the server-level instructions. A short save request is enough: the agent builds a contextual summary, leaves the recipient unspecified by default, and returns the saved ID only after success. The MCP receives the summary the agent submits; it cannot read the conversation itself. Model compliance and summary quality still depend on the harness and available context.
 
 SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts. Only a SHA-256 hash of each claim token is stored, and the token alone authorizes renew/release/complete; an expired lease keeps working until another agent acquires the handoff. Mutation timestamps never move backward, even if the system clock does. Receipts expire after 7 days. The read-only web API uses these same store methods, with a separate paginated event history.
 
@@ -13,7 +13,7 @@ The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build 
 Differences from the planning document:
 
 - A few nonessential source fields now have stable defaults, so agents can create a concise handoff without inventing metadata. Objective, current state, next steps and acceptance criteria remain required.
-- Local and private network access require no Handoff token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
+- Local and private network access require no Baton token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
 - The dashboard adds read-only HTTP endpoints and opens without a login. Agent writes remain MCP-only.
 - Count limits protect the small local store; an exact 1 GiB filesystem quota is not implemented. Disk-full errors fail the transaction; monitor the volume and back it up.
 - Tests cover the implemented contracts; the proposal's broad fault-injection/performance matrix is not represented as fully certified.
@@ -30,10 +30,10 @@ The code is layered so a hosted build can reuse everything except storage and ac
 | `domain.py` | Storage-independent rules: summaries, cursors, claim verification, acceptance-criteria matching, errors. |
 | `backend.py` | The storage contract: `Backend.transaction(ctx, write)` yields a `Transaction` scoped to one workspace, with rows as plain dicts. |
 | `sqlite_backend.py` | The local backend: single owner, single workspace, all SQL and migrations. Other workspaces get `UNKNOWN_WORKSPACE`. |
-| `service.py`, `memory.py` | `HandoffService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
+| `service.py`, `memory.py` | `BatonService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
 | `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. `core_registry().copy()` can be extended with more tools. |
 | `server.py` | `create_app(service=, auth=, allowed_hosts=, extra_routes=, middleware=)`. `auth` is an async callable that maps a request to a `RequestContext` (or `None` for 401) for `/mcp` and `/api/*`; MCP handlers and the dashboard API pass that context to the service, and events record its `actor`. |
-| `store.py` | `Store`: the local deployment (`HandoffService` over SQLite), kept for existing imports. |
+| `store.py` | `Store`: the local deployment (`BatonService` over SQLite), kept for existing imports. |
 
 A hosted build depends on this package and supplies its own `Backend` (for example Postgres with a workspace column), an authenticator, and any extra tools or routes. Tests guard the boundary: the service layer never references SQLite.
 

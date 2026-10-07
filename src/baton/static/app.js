@@ -294,8 +294,8 @@ $('refresh-button').addEventListener('click', refresh);
 $('load-more').addEventListener('click', () => loadList(true));
 const mcpUrl = new URL('/mcp', location.origin).href;
 $('mcp-url').textContent = mcpUrl;
-$('codex-add').textContent = `codex mcp add handoff --url ${mcpUrl}`;
-$('claude-add').textContent = `claude mcp add --scope user --transport http handoff ${mcpUrl}`;
+$('codex-add').textContent = `codex mcp add baton --url ${mcpUrl}`;
+$('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}`;
 $('copy-mcp-url').addEventListener('click', () => copy(mcpUrl));
 $('setup-button').addEventListener('click', () => $('setup-dialog').showModal());
 $('close-setup').addEventListener('click', () => $('setup-dialog').close());
@@ -324,7 +324,7 @@ function renderMemories() {
   if (!memories.items.length) {
     const empty = el('div', 'empty-list');
     const filtered = $('memory-search').value || $('memory-category').value;
-    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI harness “update my Handoff memory” to save what it knows about you.'));
+    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI harness “update my Baton memory” to save what it knows about you.'));
     list.append(empty);
   }
   for (const item of memories.items) {
@@ -366,7 +366,7 @@ function renderMemoryDetail(item) {
   if (!item.deleted) header.append(button('Copy memory', 'button secondary', () => copy(item.content)));
   const content = el('div', 'detail-content');
   if (item.deleted) {
-    textSection(content, 'Forgotten', 'This memory was removed from Handoff. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
+    textSection(content, 'Forgotten', 'This memory was removed from Baton. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
   } else {
     textSection(content, 'Memory', item.content);
     textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
@@ -381,7 +381,7 @@ function renderMemoryDetail(item) {
   textSection(content, 'Created', date(item.created_at));
   textSection(content, 'Revision', String(item.revision));
   textSection(content, 'Memory ID', item.id);
-  content.append(el('p', 'trust-note', 'Ask your harness to correct or forget a memory. Handoff shares personal context; each harness decides whether to remember it locally.'));
+  content.append(el('p', 'trust-note', 'Ask your harness to correct or forget a memory. Baton shares personal context; each harness decides whether to remember it locally.'));
   panel.append(header, content);
 }
 

@@ -13,8 +13,8 @@ from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 from starlette.testclient import TestClient
 
-from handoff.server import create_app
-from handoff.store import Store
+from baton.server import create_app
+from baton.store import Store
 
 
 def entry(key='communication.length', content='Prefers concise answers.', revision=0, **extra):
@@ -32,7 +32,7 @@ def forget(key, revision):
 
 
 def success(store, tool, args=None):
-    result = store.execute('handoff_memory_' + tool, args or {})
+    result = store.execute('baton_memory_' + tool, args or {})
     assert result['ok'], result
     return result['data']
 
@@ -43,11 +43,11 @@ def test_capture_update_retry_and_provenance(store):
     saved = success(store, 'update', args)
     assert saved['coverage']['omitted'] == ['Older inaccessible chats']
     assert saved['items'][0]['action'] == 'added'
-    assert store.execute('handoff_memory_update', args)['replayed']
+    assert store.execute('baton_memory_update', args)['replayed']
     assert success(store, 'read')['store_revision'] == 1
     changed = copy.deepcopy(args)
     changed['memories'][0]['content'] = 'Different'
-    assert store.execute('handoff_memory_update', changed)['error']['code'] == 'IDEMPOTENCY_CONFLICT'
+    assert store.execute('baton_memory_update', changed)['error']['code'] == 'IDEMPOTENCY_CONFLICT'
     corrected = update(entry(content='Prefers detailed explanations.', revision=1), client='claude-code')
     result = success(store, 'update', corrected)
     assert result['store_revision'] == 2
@@ -62,7 +62,7 @@ def test_capture_update_retry_and_provenance(store):
 
 def test_atomic_conflict_does_not_erase_other_memories(store):
     success(store, 'update', update(entry()))
-    result = store.execute('handoff_memory_update', update(entry('new.fact'), entry(revision=0)))
+    result = store.execute('baton_memory_update', update(entry('new.fact'), entry(revision=0)))
     assert result['error']['code'] == 'REVISION_CONFLICT'
     assert [m['key'] for m in success(store, 'read')['items']] == ['communication.length']
     success(store, 'update', update(entry('new.fact')))
@@ -72,7 +72,7 @@ def test_atomic_conflict_does_not_erase_other_memories(store):
 def test_competing_updates_have_one_winner(store):
     success(store, 'update', update(entry()))
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(lambda content: store.execute('handoff_memory_update', update(entry(content=content, revision=1))), ['First correction', 'Second correction']))
+        results = list(pool.map(lambda content: store.execute('baton_memory_update', update(entry(content=content, revision=1))), ['First correction', 'Second correction']))
     assert sum(r['ok'] for r in results) == 1
     assert next(r for r in results if not r['ok'])['error']['code'] == 'REVISION_CONFLICT'
 
@@ -83,16 +83,16 @@ def test_forget_scrubs_data_and_propagates_without_resurrection(store):
     request = forget('communication.length', 1)
     result = success(store, 'forget', request)
     assert result['items'][0]['action'] == 'deleted'
-    assert store.execute('handoff_memory_forget', request)['replayed']
+    assert store.execute('baton_memory_forget', request)['replayed']
     assert success(store, 'read')['items'] == []
     tombstone = success(store, 'read', {'since_revision': 1, 'category': 'habit', 'q': 'unmatched'})['items'][0]
     assert tombstone['deleted'] and 'content' not in tombstone and 'source' not in tombstone
     assert success(store, 'export', {'include_deleted': True, 'format': 'markdown'})['items'][0]['deleted']
     assert success(store, 'forget', forget('communication.length', 2))['store_revision'] == 2
-    assert store.execute('handoff_memory_update', update(entry(revision=2)))['error']['code'] == 'MEMORY_DELETED'
-    assert store.execute('handoff_memory_update', update(entry()))['error']['code'] == 'REVISION_CONFLICT'
+    assert store.execute('baton_memory_update', update(entry(revision=2)))['error']['code'] == 'MEMORY_DELETED'
+    assert store.execute('baton_memory_update', update(entry()))['error']['code'] == 'REVISION_CONFLICT'
     # Old successful update receipts do not retain or resurrect forgotten bodies.
-    assert store.execute('handoff_memory_update', args)['replayed']
+    assert store.execute('baton_memory_update', args)['replayed']
     assert success(store, 'read')['items'] == []
     assert store.db.execute('SELECT body FROM personal_memories').fetchone()[0] is None
     receipts = str([tuple(r) for r in store.db.execute('SELECT * FROM memory_receipts')])
@@ -108,7 +108,7 @@ def test_pagination_filters_changes_and_export(store):
     assert second['complete']
     assert len(success(store, 'read', {'q': 'Memory 12'})['items']) == 1
     assert success(store, 'read', {'category': 'habit'})['items'] == []
-    assert store.execute('handoff_memory_read', {'cursor': first['next_cursor'], 'q': 'different'})['error']['code'] == 'INVALID_CURSOR'
+    assert store.execute('baton_memory_read', {'cursor': first['next_cursor'], 'q': 'different'})['error']['code'] == 'INVALID_CURSOR'
     success(store, 'update', update(entry('topic.12', 'Changed memory', revision=13)))
     # Pagination continues across writes; every page reports the first page's checkpoint.
     continued = success(store, 'read', {'limit': 20, 'cursor': first['next_cursor']})
@@ -118,12 +118,12 @@ def test_pagination_filters_changes_and_export(store):
     exported = success(store, 'export', {'format': 'markdown', 'limit': 50})
     assert exported['schema_version'] == '1.0' and exported['complete']
     assert 'Changed memory' in exported['markdown'] and 'Source:' in exported['markdown']
-    assert store.execute('handoff_memory_read', {'since_revision': 999})['error']['code'] == 'REVISION_CONFLICT'
+    assert store.execute('baton_memory_read', {'since_revision': 999})['error']['code'] == 'REVISION_CONFLICT'
 
 
 @pytest.mark.parametrize('cursor', ['not-base64', 'bnVsbA', 'W10', 'e30'])
 def test_invalid_cursors_are_errors(store, cursor):
-    assert store.execute('handoff_memory_read', {'cursor': cursor})['error']['code'] == 'INVALID_CURSOR'
+    assert store.execute('baton_memory_read', {'cursor': cursor})['error']['code'] == 'INVALID_CURSOR'
 
 
 @pytest.mark.parametrize('change', [
@@ -138,22 +138,22 @@ def test_invalid_cursors_are_errors(store, cursor):
 def test_strict_validation(store, change):
     args = update(entry())
     change(args)
-    assert store.execute('handoff_memory_update', args)['error']['code'] == 'VALIDATION_ERROR'
+    assert store.execute('baton_memory_update', args)['error']['code'] == 'VALIDATION_ERROR'
     assert success(store, 'read')['items'] == []
 
 
 def test_existing_store_upgrade_restart_and_retention(tmp_path, record):
     store = Store(tmp_path)
-    handoff = store.execute('handoff_push', {'record': record})['data']
+    handoff = store.execute('baton_push', {'record': record})['data']
     store.close()
     # Simulate a pre-memory database using the established schema 2.
     import sqlite3
-    db = sqlite3.connect(tmp_path / 'handoff.sqlite3')
+    db = sqlite3.connect(tmp_path / 'baton.sqlite3')
     db.executescript("DROP TABLE personal_memories; DROP TABLE memory_receipts; DELETE FROM meta WHERE key='memory_revision';")
     db.close()
     store = Store(tmp_path, retention_days=.001)
     try:
-        assert store.execute('handoff_get', {'id': handoff['id']})['ok']
+        assert store.execute('baton_get', {'id': handoff['id']})['ok']
         success(store, 'update', update(entry()))
     finally:
         store.close()
@@ -189,32 +189,32 @@ async def test_memory_http_stdio_round_trip(live_server):
         async with streamable_http_client(url, http_client=http) as (read, write, _):
             async with ClientSession(read, write) as codex:
                 init = await codex.initialize()
-                assert 'ALL' in init.instructions and 'Handoff never reads or writes' in init.instructions
+                assert 'ALL' in init.instructions and 'Baton never reads or writes' in init.instructions
                 tools = {t.name: t for t in (await codex.list_tools()).tools}
-                assert tools['handoff_memory_read'].annotations.readOnlyHint
-                assert tools['handoff_memory_export'].annotations.readOnlyHint
-                assert tools['handoff_memory_forget'].annotations.destructiveHint
+                assert tools['baton_memory_read'].annotations.readOnlyHint
+                assert tools['baton_memory_export'].annotations.readOnlyHint
+                assert tools['baton_memory_forget'].annotations.destructiveHint
                 assert all(len(tools[name].description) < 1000 for name in tools if 'memory' in name)
-                assert not tools['handoff_memory_update'].annotations.destructiveHint
+                assert not tools['baton_memory_update'].annotations.destructiveHint
                 assert 'ALL' in (await codex.get_prompt('memory-update')).messages[0].content.text
-                saved = await codex.call_tool('handoff_memory_update', update(entry()))
+                saved = await codex.call_tool('baton_memory_update', update(entry()))
                 assert not saved.isError
                 params = StdioServerParameters(command=sys.executable,
                     env={'PYTHONPATH': str(Path(__file__).resolve().parents[1] / 'src')},
-                    args=['-m', 'handoff', '--url', url, 'bridge'])
+                    args=['-m', 'baton', '--url', url, 'bridge'])
                 async with stdio_client(params) as (incoming, outgoing):
                     async with ClientSession(incoming, outgoing) as claude:
                         await claude.initialize()
-                        imported = await claude.call_tool('handoff_memory_read', {})
+                        imported = await claude.call_tool('baton_memory_read', {})
                         memory = imported.structuredContent['data']['items'][0]
                         assert memory['content'] == 'Prefers concise answers.'
                         prompt = await claude.get_prompt('memory-import')
                         assert 'persistent local import' in prompt.messages[0].content.text
-                        corrected = await claude.call_tool('handoff_memory_update', update(entry(content='Prefers examples.', revision=memory['revision']), client='claude-code'))
+                        corrected = await claude.call_tool('baton_memory_update', update(entry(content='Prefers examples.', revision=memory['revision']), client='claude-code'))
                         assert not corrected.isError
-                imported = await codex.call_tool('handoff_memory_read', {'since_revision': 1})
+                imported = await codex.call_tool('baton_memory_read', {'since_revision': 1})
                 assert imported.structuredContent['data']['items'][0]['content'] == 'Prefers examples.'
-                assert (await codex.call_tool('handoff_memory_export', {'format': 'markdown'})).structuredContent['data']['complete']
+                assert (await codex.call_tool('baton_memory_export', {'format': 'markdown'})).structuredContent['data']['complete']
 
 
 def test_resync_keeps_original_provenance(store):
@@ -237,7 +237,7 @@ def test_resync_keeps_original_provenance(store):
 def test_conflicts_are_all_reported_and_partial_applies_the_rest(store):
     success(store, 'update', update(entry('a.one'), entry('a.two')))
     stale = update(entry('a.one', 'New one'), entry('a.two', 'New two'), entry('a.three', 'Three'))
-    error = store.execute('handoff_memory_update', stale)['error']
+    error = store.execute('baton_memory_update', stale)['error']
     assert error['code'] == 'REVISION_CONFLICT'
     assert {c['key']: c['current_revision'] for c in error['conflicts']} == {'a.one': 1, 'a.two': 2}
     assert 'a.one' in error['message'] and 'a.two' in error['message']
@@ -253,7 +253,7 @@ def test_forgotten_key_can_be_recreated_explicitly(store):
     success(store, 'update', update(entry()))
     success(store, 'forget', {'memories': [{'key': 'communication.length'}]})
     old_id = success(store, 'read', {'include_deleted': True})['items'][0]['id']
-    blocked = store.execute('handoff_memory_update', update(entry(content='Now prefers detail.', revision=2)))['error']
+    blocked = store.execute('baton_memory_update', update(entry(content='Now prefers detail.', revision=2)))['error']
     assert blocked['code'] == 'MEMORY_DELETED' and 'recreate=true' in blocked['message']
     recreated = success(store, 'update', update(entry(content='Now prefers detail.', revision=2, recreate=True)))
     assert recreated['items'][0]['action'] == 'recreated' and recreated['items'][0]['id'] != old_id

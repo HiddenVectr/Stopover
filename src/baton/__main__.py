@@ -2,13 +2,14 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
 import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+
+from . import env
 
 
 async def call_remote(url, name, arguments):
@@ -26,9 +27,9 @@ async def call_remote(url, name, arguments):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Local Handoff MCP service and tools")
-    parser.add_argument("--data-dir", default=os.environ.get("HANDOFF_DATA_DIR", "/data"))
-    parser.add_argument("--url", default=os.environ.get("HANDOFF_URL", "http://127.0.0.1:8080/mcp"))
+    parser = argparse.ArgumentParser(description="Local Baton MCP service and tools")
+    parser.add_argument("--data-dir", default=env("DATA_DIR", "/data"))
+    parser.add_argument("--url", default=env("URL", "http://127.0.0.1:8080/mcp"))
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
@@ -52,7 +53,7 @@ def main():
         else:
             if args.command == "seed-demo":
                 from .sample import sample_record
-                name, arguments = "handoff_push", {"operation_id": "f4b73ba9-55d3-4799-b447-f985bd18e503", "record": sample_record()}
+                name, arguments = "baton_push", {"operation_id": "f4b73ba9-55d3-4799-b447-f985bd18e503", "record": sample_record()}
             elif args.command == "import":
                 from .models import Push
                 payload = sys.stdin.buffer.read(65537) if args.file == "-" else Path(args.file).read_bytes()
@@ -62,14 +63,14 @@ def main():
                 Push.model_validate(arguments)
                 if arguments["record"]["source"].get("transfer_method") != "manual_import":
                     raise ValueError("Set source.transfer_method to manual_import before importing")
-                name = "handoff_push"
+                name = "baton_push"
             else:
-                name, arguments = "handoff_get", {"id": args.id}
+                name, arguments = "baton_get", {"id": args.id}
             result = asyncio.run(call_remote(args.url, name, arguments))
             print(json.dumps(result, indent=2, ensure_ascii=False))
     except (Exception, KeyboardInterrupt) as exc:
         # Exception payloads can contain credentials or source material. Keep stderr generic.
-        print(f"Handoff could not finish {args.command} ({type(exc).__name__}). Check the service URL and input format.", file=sys.stderr)
+        print(f"Baton could not finish {args.command} ({type(exc).__name__}). Check the service URL and input format.", file=sys.stderr)
         raise SystemExit(1)
 
 

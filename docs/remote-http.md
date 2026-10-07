@@ -1,18 +1,18 @@
-# Host Handoff on your Tailscale network
+# Host Baton on your Tailscale network
 
-Run the Handoff container on your server and use Tailscale Serve to provide a private HTTPS endpoint. Each AI harness connects directly using Streamable HTTP. Clients need network access to your tailnet, but no Docker, Python, SSH tunnel, or stdio bridge.
+Run the Baton container on your server and use Tailscale Serve to provide a private HTTPS endpoint. Each AI harness connects directly using Streamable HTTP. Clients need network access to your tailnet, but no Docker, Python, SSH tunnel, or stdio bridge.
 
 ```text
 AI harness on your tailnet
   -> https://<server>.<tailnet>.ts.net/mcp
   -> Tailscale Serve on the server
   -> http://127.0.0.1:8765/mcp
-  -> Handoff container + persistent SQLite volume
+  -> Baton container + persistent SQLite volume
 ```
 
 ## Access model
 
-Handoff requires no connection token or login. Handoff only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `HANDOFF_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Access is otherwise controlled by Tailscale and the server's network configuration. Anyone allowed to reach Handoff can read and mutate its shared inbox; there are no separate user permissions inside the application.
+Baton requires no connection token or login. Baton only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `BATON_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Access is otherwise controlled by Tailscale and the server's network configuration. Anyone allowed to reach Baton can read and mutate its shared inbox; there are no separate user permissions inside the application.
 
 Keep Docker's published port bound to loopback (`127.0.0.1:8765:8080`) and use **Tailscale Serve**. Tailscale Funnel publishes services to the internet and is unsuitable for this token-free deployment. Restrict tailnet access to the server's HTTPS port (443) to your intended users/devices. [Tailscale Serve applies tailnet access rules](https://tailscale.com/docs/features/tailscale-serve).
 
@@ -25,8 +25,8 @@ Install Docker Engine with Compose and [Tailscale](https://tailscale.com/docs/in
 Authenticate Git on the server with an account that can read the private repository, then clone and start it:
 
 ```sh
-git clone https://github.com/HiddenVectr/Handoff.git
-cd Handoff
+git clone https://github.com/HiddenVectr/Baton.git
+cd Baton
 docker compose up --build -d
 docker compose ps
 curl --fail http://127.0.0.1:8765/healthz
@@ -43,9 +43,9 @@ sudo tailscale serve --bg http://127.0.0.1:8765
 tailscale serve status
 ```
 
-Follow the HTTPS enablement link if Tailscale prints one. Serve supplies a certificate and prints the actual URL, for example `https://myserver.example-tailnet.ts.net`. Substitute that actual hostname everywhere below. No Handoff environment variable or code change is needed for a different server name.
+Follow the HTTPS enablement link if Tailscale prints one. Serve supplies a certificate and prints the actual URL, for example `https://myserver.example-tailnet.ts.net`. Substitute that actual hostname everywhere below. No Baton environment variable or code change is needed for a different server name.
 
-`--bg` keeps the Serve configuration active across Tailscale and server restarts. The container uses `restart: unless-stopped`; ensure Docker and Tailscale start with the host. If Serve already routes another application on port 443, inspect its configuration before assigning the root path to Handoff. See the [Serve CLI reference](https://tailscale.com/docs/reference/tailscale-cli/serve).
+`--bg` keeps the Serve configuration active across Tailscale and server restarts. The container uses `restart: unless-stopped`; ensure Docker and Tailscale start with the host. If Serve already routes another application on port 443, inspect its configuration before assigning the root path to Baton. See the [Serve CLI reference](https://tailscale.com/docs/reference/tailscale-cli/serve).
 
 ## 3. Connect your harnesses
 
@@ -70,7 +70,7 @@ curl --fail https://myserver.example-tailnet.ts.net/healthz
 
 Open the dashboard at the same origin, then ask your harness:
 
-> Use Handoff's handoff_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
+> Use Baton's baton_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
 
 An empty successful result is valid. Confirm discovery of all eleven tools. To save context, say:
 
@@ -88,10 +88,10 @@ docker compose ps
 
 The data volume is preserved. Do not run `docker compose down -v` unless you intend to delete its handoffs.
 
-- If the local health check fails, inspect `docker logs --tail 50 handoff` and `docker compose ps`.
+- If the local health check fails, inspect `docker logs --tail 50 baton` and `docker compose ps`.
 - If local health works but the HTTPS check fails, inspect `tailscale status`, `tailscale serve status`, the client's tailnet connection, and access rules for port 443.
-- If a client receives `Host not allowed`, it is using a hostname or IP outside the allowlist. Use the `*.ts.net` Serve URL, or add the name to `HANDOFF_ALLOWED_HOSTS` and restart the container.
-- If Handoff returns `Cross-site request not allowed`, open the dashboard directly at its Serve URL. Native MCP clients normally omit Fetch Metadata headers.
+- If a client receives `Host not allowed`, it is using a hostname or IP outside the allowlist. Use the `*.ts.net` Serve URL, or add the name to `BATON_ALLOWED_HOSTS` and restart the container.
+- If Baton returns `Cross-site request not allowed`, open the dashboard directly at its Serve URL. Native MCP clients normally omit Fetch Metadata headers.
 - If a harness discovers no tools, verify that it uses the `/mcp` endpoint and Streamable HTTP, then reload its MCP configuration or start a new session.
 
 MCP transfers saved task context, not project files. Receiving agents need their own access to any workspace required to continue the work.

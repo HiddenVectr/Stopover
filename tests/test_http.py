@@ -1,7 +1,7 @@
 import pytest
 from starlette.testclient import TestClient
 
-from handoff.server import create_app
+from baton.server import create_app
 
 
 def test_local_dashboard_and_api_need_no_token(tmp_path):
@@ -48,7 +48,7 @@ def test_cross_site_browser_requests_are_rejected(tmp_path):
 def test_all_details_and_events_are_read_only(tmp_path, record):
     import uuid
     app = create_app(tmp_path)
-    saved = app.state.store.execute("handoff_push", {"operation_id": str(uuid.uuid4()), "record": record})["data"]
+    saved = app.state.store.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": record})["data"]
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         detail = client.get("/api/handoffs/" + saved["id"]).json()["data"]
         assert detail["record"]["context"]["constraints"] == record["context"]["constraints"]
@@ -62,7 +62,7 @@ def test_all_details_and_events_are_read_only(tmp_path, record):
 def test_committed_schemas_match_models():
     import json
     from pathlib import Path
-    from handoff.models import INPUTS, Record
+    from baton.models import INPUTS, Record
     schemas = Path(__file__).resolve().parents[1] / "schemas"
     for name, model in {**INPUTS, "record": Record}.items():
         assert json.loads((schemas / f"{name}.json").read_text()) == model.model_json_schema(), name

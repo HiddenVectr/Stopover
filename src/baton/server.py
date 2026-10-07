@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
@@ -20,11 +19,11 @@ from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from . import __version__
+from . import __version__, env
 from .catalog import DESCRIPTIONS, INSTRUCTIONS, MEMORY_INSTRUCTIONS, SAVE_INSTRUCTIONS  # noqa: F401 (re-exported)
 from .context import LOCAL, RequestContext
 from .domain import DomainError
-from .service import HandoffService
+from .service import BatonService
 from .store import Store
 
 STATIC = Path(__file__).parent / "static"
@@ -42,9 +41,9 @@ def request_context(request) -> RequestContext:
     return getattr(request.state, "handoff_ctx", LOCAL) if request is not None else LOCAL
 
 
-def make_mcp(service: HandoffService):
+def make_mcp(service: BatonService):
     registry = service.registry
-    server = Server("handoff", version=__version__, instructions=registry.server_instructions())
+    server = Server("baton", version=__version__, instructions=registry.server_instructions())
 
     def current_context():
         try:
@@ -96,7 +95,7 @@ class HostAllowlist:
         if scope["type"] == "http":
             host = dict(scope["headers"]).get(b"host", b"").decode("latin-1")
             if not host_allowed(host, self.allowed):
-                return await JSONResponse({"error": "Host not allowed. Add it to HANDOFF_ALLOWED_HOSTS on the server."},
+                return await JSONResponse({"error": "Host not allowed. Add it to BATON_ALLOWED_HOSTS on the server."},
                                           status_code=403)(scope, receive, send)
         await self.app(scope, receive, send)
 
@@ -167,7 +166,7 @@ class RequestBoundary:
         await self.app(scope, replay, secure_send)
 
 
-def create_app(directory=None, *, service: HandoffService | None = None, auth: Authenticator | None = None,
+def create_app(directory=None, *, service: BatonService | None = None, auth: Authenticator | None = None,
                allowed_hosts: Iterable[str] | None = None, extra_routes: Iterable[BaseRoute] = (),
                middleware: Iterable[Middleware] = ()):
     """Build the HTTP app.
@@ -176,11 +175,11 @@ def create_app(directory=None, *, service: HandoffService | None = None, auth: A
     an authenticator that maps requests to a RequestContext, its allowed hosts, and any extra routes or middleware.
     """
     if service is None:
-        directory = directory or os.environ.get("HANDOFF_DATA_DIR", "/data")
-        retention = os.environ.get("HANDOFF_RETENTION_DAYS")
+        directory = directory or env("DATA_DIR", "/data")
+        retention = env("RETENTION_DAYS")
         service = Store(directory, retention_days=float(retention) if retention else None)
     if allowed_hosts is None:
-        allowed_hosts = [*DEFAULT_ALLOWED_HOSTS, *parse_hosts(os.environ.get("HANDOFF_ALLOWED_HOSTS"))]
+        allowed_hosts = [*DEFAULT_ALLOWED_HOSTS, *parse_hosts(env("ALLOWED_HOSTS"))]
     server = make_mcp(service)
     # Host checks happen in HostAllowlist, which supports wildcard domains; the SDK's exact-match check is off.
     manager = StreamableHTTPSessionManager(app=server, json_response=True, stateless=True, max_request_body_size=65536,
@@ -218,7 +217,7 @@ def create_app(directory=None, *, service: HandoffService | None = None, auth: A
             except ValueError:
                 return JSONResponse({"error": "Invalid limit"}, status_code=400)
         params.setdefault("status", "all")
-        result = await call(request, "handoff_list", params)
+        result = await call(request, "baton_list", params)
         return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
     async def memories(request):
@@ -232,11 +231,11 @@ def create_app(directory=None, *, service: HandoffService | None = None, auth: A
         if "key" in request.path_params:
             params["key"] = request.path_params["key"]
             params["include_deleted"] = True
-        result = await call(request, "handoff_memory_read", params)
+        result = await call(request, "baton_memory_read", params)
         return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
     async def detail(request):
-        result = await call(request, "handoff_get", {"id": request.path_params["id"]})
+        result = await call(request, "baton_get", {"id": request.path_params["id"]})
         return JSONResponse(result, status_code=200 if result["ok"] else 404 if result["error"]["code"] == "NOT_FOUND" else 400)
 
     async def events(request):

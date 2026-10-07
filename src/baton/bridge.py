@@ -16,7 +16,7 @@ async def bridge(url):
                 await upstream.initialize()
                 tools = (await upstream.list_tools()).tools
                 prompts = (await upstream.list_prompts()).prompts
-                server = Server("handoff", version=__version__, instructions=INSTRUCTIONS)
+                server = Server("baton", version=__version__, instructions=INSTRUCTIONS)
 
                 @server.list_tools()
                 async def list_tools():

@@ -1,14 +1,14 @@
-name: handoff
+name: baton
 services:
-  handoff:
+  baton:
     build: .
-    image: handoff-local:0.4.0
-    container_name: handoff
+    image: baton:0.5.0
+    container_name: baton
     restart: unless-stopped
     ports:
       - "127.0.0.1:8765:8080"
     volumes:
-      - handoff_data:/data
+      - baton_data:/data
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
@@ -29,4 +29,4 @@ services:
         max-size: "5m"
         max-file: "2"
 volumes:
-  handoff_data:
+  baton_data:

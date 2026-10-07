@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f6f7f4"><title>Handoff · Local agent inbox</title>
+  <meta name="theme-color" content="#f6f7f4"><title>Baton · Local agent inbox</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%231e5944'/%3E%3Cpath d='M9 15h20m-6-6 6 6-6 6M31 26H11m6-6-6 6 6 6' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/assets/style.css"><script src="/assets/app.js" defer></script>
 </head>
 <body>
   <div id="app" class="app">
     <aside class="sidebar">
-      <a href="/" class="brand"><span class="brand-icon" aria-hidden="true">⇄</span>Handoff</a>
+      <a href="/" class="brand"><span class="brand-icon" aria-hidden="true">⇄</span>Baton</a>
       <div class="workspace"><span class="workspace-avatar">L</span><div><strong>Local workspace</strong><span>One machine. All your agents.</span></div></div>
       <p class="nav-label">INBOX</p>
-      <nav aria-label="Handoff navigation">
+      <nav aria-label="Baton navigation">
         <button class="nav-item active" data-status="all"><span>All handoffs</span><span class="count" id="count-all">0</span></button>
         <button class="nav-item" data-status="available"><span><i class="dot available"></i>Ready to resume</span><span class="count" id="count-available">0</span></button>
         <button class="nav-item" data-status="claimed"><span><i class="dot claimed"></i>In progress</span><span class="count" id="count-claimed">0</span></button>
@@ -39,12 +39,12 @@
         <p id="memory-error" class="error" role="alert" hidden></p>
         <div class="inbox-layout">
           <section class="list-panel" aria-label="Personal memories"><div class="list-heading"><span>MEMORIES</span><span class="small muted">By topic</span></div><div id="memory-list" aria-live="polite"></div><button id="memory-more" class="button secondary load-more" hidden>Load more memories</button></section>
-          <section id="memory-detail" class="detail-panel" aria-label="Personal memory details"><div class="empty-detail"><span class="empty-icon" aria-hidden="true">◎</span><h2>Personal context, in one place.</h2><p>Select a memory to see its source and latest update.</p><span class="small muted">Ask your harness to “update my Handoff memory”.</span></div></section>
+          <section id="memory-detail" class="detail-panel" aria-label="Personal memory details"><div class="empty-detail"><span class="empty-icon" aria-hidden="true">◎</span><h2>Personal context, in one place.</h2><p>Select a memory to see its source and latest update.</p><span class="small muted">Ask your harness to “update my Baton memory”.</span></div></section>
         </div>
       </div>
     </main>
   </div>
-  <dialog id="setup-dialog"><div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div><p class="muted">Add this Streamable HTTP MCP server to your harness. No token or login is needed.</p><h3>MCP URL</h3><pre id="mcp-url"></pre><button id="copy-mcp-url" class="button secondary" type="button">Copy MCP URL</button><h3>Codex</h3><pre id="codex-add"></pre><h3>Claude Code</h3><pre id="claude-add"></pre><p class="small muted">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None. Open a fresh agent session, then ask it to upload a handoff or “update my Handoff memory”. To retrieve personal memories in another harness, say “import my Handoff memory”.</p></dialog>
+  <dialog id="setup-dialog"><div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div><p class="muted">Add this Streamable HTTP MCP server to your harness. No token or login is needed.</p><h3>MCP URL</h3><pre id="mcp-url"></pre><button id="copy-mcp-url" class="button secondary" type="button">Copy MCP URL</button><h3>Codex</h3><pre id="codex-add"></pre><h3>Claude Code</h3><pre id="claude-add"></pre><p class="small muted">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None. Open a fresh agent session, then ask it to upload a handoff or “update my Baton memory”. To retrieve personal memories in another harness, say “import my Baton memory”.</p></dialog>
   <dialog id="copy-dialog"><div class="dialog-heading"><h2>Copy this text</h2><button id="close-copy" class="icon-button" aria-label="Close copy text">×</button></div><p class="muted">Your browser couldn’t use the clipboard. The text is selected below; press Ctrl+C or ⌘C to copy it.</p><textarea id="copy-text" class="copy-text" aria-label="Text to copy" readonly></textarea></dialog>
   <div id="toast" role="status" class="toast" hidden></div>
 </body>

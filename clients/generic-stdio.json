@@ -1,15 +1,15 @@
 {
   "mcpServers": {
-    "handoff": {
+    "baton": {
       "type": "stdio",
       "command": "docker",
       "args": [
         "exec",
         "-i",
-        "handoff",
+        "baton",
         "python",
         "-m",
-        "handoff",
+        "baton",
         "bridge"
       ]
     }
