@@ -35,6 +35,7 @@ The code is layered so a hosted build can reuse everything except storage and ac
 | `server.py` | `create_app(service=, auth=, allowed_hosts=, extra_routes=, middleware=)`. `auth` is an async callable that maps a request to a `RequestContext` (or `None` for 401) for `/mcp` and `/api/*`; MCP handlers and the dashboard API pass that context to the service, and events record its `actor`. |
 | `domain.Policy` | Per-workspace limits and retention. `BatonService(policy=...)` takes a `Policy` or a function of the `RequestContext`, so a hosted build can vary limits by plan. |
 | `on_event` | `BatonService(on_event=...)` receives events such as `handoff.pushed`, `handoff.completed` and `memory.updated` after each commit (never on replays or rollbacks). Events carry IDs, revisions and the actor, never handoff or memory content; handler errors are logged and ignored. |
+| Dashboard sign-in | When `/api/*` answers 401 (an `auth` hook is configured), the dashboard asks for an access token, keeps it in `localStorage`, and sends it as `Authorization: Bearer`. Its connection instructions then show the token header with a `YOUR_TOKEN` placeholder. Without auth nothing changes. |
 | `testing.py` | The backend conformance suite. A project with its own `Backend` runs it with `from baton.testing import *` and a `make_service` fixture (install the `testing` extra). Baton runs it against SQLite in `tests/test_conformance.py`. |
 | `store.py` | `Store`: the local deployment (`BatonService` over SQLite), kept for existing imports. |
 

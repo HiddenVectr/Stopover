@@ -45,8 +45,23 @@ function showToast(message) {
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3500);
 }
 
+const TOKEN_KEY = 'baton.accessToken';
+function accessToken() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } }
+function storeToken(value) {
+  try { if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
+  updateAuthUI();
+}
+function authHeaders(value = accessToken()) { return value ? { authorization: 'Bearer ' + value } : {}; }
+
+// Servers that wrap Baton with authentication answer 401; ask for an access token instead of failing.
+function requireSignIn() {
+  if (accessToken()) storeToken('');
+  if (!$('signin-dialog').open) { $('signin-error').hidden = true; $('signin-dialog').showModal(); $('signin-token').focus(); }
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, { credentials: 'omit', cache: 'no-store', ...options });
+  const response = await fetch(path, { credentials: 'omit', cache: 'no-store', ...options, headers: { ...(options.headers || {}), ...authHeaders() } });
+  if (response.status === 401) { requireSignIn(); throw new Error('Sign in with an access token to continue.'); }
   const data = await response.json();
   if (!response.ok || data.ok === false) throw new Error(data.error?.message || data.error || 'The local service could not complete this request.');
   return data;
@@ -294,8 +309,35 @@ $('refresh-button').addEventListener('click', refresh);
 $('load-more').addEventListener('click', () => loadList(true));
 const mcpUrl = new URL('/mcp', location.origin).href;
 $('mcp-url').textContent = mcpUrl;
-$('codex-add').textContent = `codex mcp add baton --url ${mcpUrl}`;
-$('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}`;
+function updateAuthUI() {
+  const signedIn = Boolean(accessToken());
+  $('signout-button').hidden = !signedIn;
+  // Show a placeholder rather than the real token so it never appears in screenshots or screen shares.
+  $('codex-add').textContent = signedIn ? `export BATON_TOKEN=YOUR_TOKEN\ncodex mcp add baton --url ${mcpUrl} --bearer-token-env-var BATON_TOKEN` : `codex mcp add baton --url ${mcpUrl}`;
+  $('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
+  $('setup-intro').textContent = signedIn ? 'Add this Streamable HTTP MCP server to your harness. Requests need your access token (replace YOUR_TOKEN).'
+    : 'Add this Streamable HTTP MCP server to your harness. No token or login is needed.';
+  $('setup-auth').textContent = signedIn ? 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and the header Authorization: Bearer YOUR_TOKEN.'
+    : 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None.';
+}
+updateAuthUI();
+$('signin-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const value = $('signin-token').value.trim();
+  if (!value) return;
+  $('signin-submit').disabled = true;
+  try {
+    const response = await fetch('/api/overview', { credentials: 'omit', cache: 'no-store', headers: authHeaders(value) });
+    if (!response.ok) throw new Error(response.status === 401 ? 'That token was not accepted.' : 'The server could not check the token.');
+    storeToken(value);
+    $('signin-token').value = '';
+    $('signin-dialog').close();
+    error();
+    route();
+  } catch (exception) { $('signin-error').textContent = exception.message; $('signin-error').hidden = false; }
+  finally { $('signin-submit').disabled = false; }
+});
+$('signout-button').addEventListener('click', () => { storeToken(''); requireSignIn(); });
 $('copy-mcp-url').addEventListener('click', () => copy(mcpUrl));
 $('setup-button').addEventListener('click', () => $('setup-dialog').showModal());
 $('close-setup').addEventListener('click', () => $('setup-dialog').close());
@@ -444,7 +486,7 @@ $('memory-search').addEventListener('input', () => { clearTimeout(memorySearchTi
 $('memory-category').addEventListener('change', () => loadMemories());
 addEventListener('popstate', route);
 setInterval(async () => {
-  if (document.hidden || $('setup-dialog').open) return;
+  if (document.hidden || $('setup-dialog').open || $('signin-dialog').open) return;
   if (memories.active) {
     try {
       await overview();

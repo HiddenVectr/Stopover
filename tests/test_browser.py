@@ -25,7 +25,8 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(live_server["url"])
         expect(page.get_by_role("heading", name="All handoffs", exact=True)).to_be_visible()
-        assert page.locator("input[type=password]").count() == 0
+        expect(page.locator("#signin-dialog")).not_to_be_visible()
+        expect(page.locator("#signout-button")).to_be_hidden()
         row = page.locator(".handoff-row").filter(has_text=args["record"]["title"])
         expect(row).to_be_visible()
         page.get_by_role("button", name="Connect your agents").click()
@@ -132,3 +133,57 @@ def test_personal_memories_browse_search_refresh_and_mobile(live_server):
         expect(page.get_by_role('heading', name='Personal memories', exact=True)).to_be_visible()
         assert not errors, errors
         browser.close()
+
+
+def test_dashboard_signs_in_when_the_server_requires_a_token(tmp_path, record):
+    import socket
+    import threading
+    import time
+    import uvicorn
+    from baton.context import RequestContext
+    from baton.server import create_app
+
+    async def auth(request):
+        return RequestContext(actor="alice") if request.headers.get("authorization") == "Bearer good-token" else None
+
+    app = create_app(tmp_path, auth=auth)
+    app.state.service.execute("baton_push", {"record": record})
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    url = f"http://127.0.0.1:{port}"
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(url)
+            expect(page.locator("#signin-dialog")).to_be_visible()
+            page.get_by_label("Access token").fill("bad-token")
+            page.get_by_role("button", name="Sign in").click()
+            expect(page.locator("#signin-error")).to_have_text("That token was not accepted.")
+            page.get_by_label("Access token").fill("good-token")
+            page.get_by_role("button", name="Sign in").click()
+            expect(page.locator("#signin-dialog")).not_to_be_visible()
+            expect(page.locator(".handoff-row").filter(has_text=record["title"])).to_be_visible()
+            page.get_by_role("button", name="Connect your agents").first.click()
+            expect(page.locator("#claude-add")).to_contain_text('--header "Authorization: Bearer YOUR_TOKEN"')
+            expect(page.locator("#setup-dialog")).not_to_contain_text("good-token")
+            page.get_by_role("button", name="Close connection instructions").click()
+            page.reload()
+            expect(page.locator(".handoff-row").filter(has_text=record["title"])).to_be_visible()
+            expect(page.locator("#signin-dialog")).not_to_be_visible()
+            page.get_by_role("button", name="Sign out").click()
+            expect(page.locator("#signin-dialog")).to_be_visible()
+            assert page.evaluate("localStorage.getItem('baton.accessToken')") is None
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
