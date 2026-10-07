@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
+import threading
 import time
 import uuid
+from typing import Callable
 
 import mcp.types as types
 from pydantic import ValidationError
@@ -12,19 +15,56 @@ from pydantic import ValidationError
 from . import catalog, memory
 from .backend import Backend
 from .context import LOCAL, RequestContext
-from .domain import (MAX_HANDOFFS, MAX_RECEIPTS, RECEIPT_TTL, DomainError, decode_cursor, detail, digest,
+from .domain import (RECEIPT_TTL, DomainError, Policy, decode_cursor, detail, digest,
                      effective_status, encode_cursor, request_digest, resolve_completion, summary, token_hash, utc,
                      verify_claim)
 from .models import DEFAULT_LEASE, INPUTS, bounded_json
 from .registry import Prompt, Registry, Tool
 
 
+log = logging.getLogger("baton")
+EventHandler = Callable[[RequestContext, dict], None]
+
+
 class BatonService:
-    def __init__(self, backend: Backend, *, clock=time.time, retention_days=None, registry: Registry | None = None):
+    """Validation, idempotent mutations and dispatch over any Backend.
+
+    policy: a Policy, or a function returning one for a RequestContext (limits and retention per workspace).
+    on_event: called after each commit with (ctx, event). Events are dicts with a "type" of handoff.pushed,
+    handoff.acquire, handoff.renew, handoff.release, handoff.completed, handoff.deleted, memory.updated or
+    memory.forgotten, plus IDs, revisions and timestamps. They never contain handoff or memory content.
+    Failures in the handler are logged and do not affect the request.
+    """
+    def __init__(self, backend: Backend, *, clock=time.time, retention_days=None, registry: Registry | None = None,
+                 policy: Policy | Callable[[RequestContext], Policy] | None = None, on_event: EventHandler | None = None):
         self.backend = backend
         self.clock = clock
-        self.retention_days = retention_days
+        self.policy = policy if policy is not None else Policy(retention_days=retention_days)
         self.registry = registry or core_registry()
+        self.on_event = on_event
+        self._local = threading.local()
+
+    @property
+    def retention_days(self):
+        return self.policy.retention_days if isinstance(self.policy, Policy) else None
+
+    def policy_for(self, ctx) -> Policy:
+        return self.policy if isinstance(self.policy, Policy) else self.policy(ctx)
+
+    def _record(self, event):
+        """Queue an event for emission once the current transaction commits."""
+        pending = getattr(self._local, "events", None)
+        if pending is not None:
+            pending.append(event)
+
+    def _emit(self, ctx, events):
+        if not self.on_event:
+            return
+        for event in events:
+            try:
+                self.on_event(ctx, event)
+            except Exception:
+                log.exception("Baton event handler failed for %s", event.get("type"))
 
     # Entry point used by MCP, the dashboard API and the CLI.
     def execute(self, name, arguments, ctx: RequestContext | None = None):
@@ -58,36 +98,45 @@ class BatonService:
         # Without a caller-supplied operation ID the request still succeeds, but a retry is a new request.
         operation = request.get("operation_id") or str(uuid.uuid4())
         request_hash = request_digest(request)
-        with self.backend.transaction(ctx, write=True) as tx:
-            # Keep stored times monotonic if the system clock steps backward.
-            last_time = tx.get_meta("last_time")
-            if last_time:
-                now = max(now, float(last_time))
-            self._prune(tx, now)
-            previous = tx.get_receipt(scope, name, operation)
-            if previous:
-                if previous["request_hash"] != request_hash:
-                    raise DomainError("IDEMPOTENCY_CONFLICT", "This operation ID was already used with different arguments")
-                return previous["result"], True
-            if tx.count_receipts(scope) >= MAX_RECEIPTS:
-                raise DomainError("STORE_FULL", "Receipt limit reached; retry later or back up the store")
-            data = apply(tx, now)
-            data["receipt_at"] = utc(now)
-            tx.put_receipt(scope, name, operation, request_hash, data, now, handoff_id=data.get("id") if scope == "handoff" else None)
-            tx.set_meta("last_time", str(now))
-            return data, False
+        policy = self.policy_for(ctx)
+        events = self._local.events = []
+        try:
+            with self.backend.transaction(ctx, write=True) as tx:
+                # Keep stored times monotonic if the system clock steps backward.
+                last_time = tx.get_meta("last_time")
+                if last_time:
+                    now = max(now, float(last_time))
+                self._prune(tx, policy, now)
+                previous = tx.get_receipt(scope, name, operation)
+                if previous:
+                    if previous["request_hash"] != request_hash:
+                        raise DomainError("IDEMPOTENCY_CONFLICT", "This operation ID was already used with different arguments")
+                    result = previous["result"], True
+                else:
+                    if tx.count_receipts(scope) >= policy.max_receipts:
+                        raise DomainError("STORE_FULL", "Receipt limit reached; retry later or back up the store")
+                    data = apply(tx, now)
+                    data["receipt_at"] = utc(now)
+                    tx.put_receipt(scope, name, operation, request_hash, data, now, handoff_id=data.get("id") if scope == "handoff" else None)
+                    tx.set_meta("last_time", str(now))
+                    result = data, False
+        finally:
+            self._local.events = None
+        self._emit(ctx, events)
+        return result
 
-    def _prune(self, tx, now):
+    def _prune(self, tx, policy, now):
         tx.prune_receipts(now - RECEIPT_TTL)
-        if self.retention_days:
-            for handoff_id in tx.completed_before(now - self.retention_days * 86400):
+        if policy.retention_days:
+            for handoff_id in tx.completed_before(now - policy.retention_days * 86400):
                 tx.delete_handoff(handoff_id)
+                self._record({"type": "handoff.deleted", "handoff_id": handoff_id, "reason": "retention", "at": utc(now)})
 
-    @staticmethod
-    def _event(tx, ctx, handoff_id, event, now, revision, details):
+    def _event(self, tx, ctx, handoff_id, event, now, revision, details):
         if ctx.actor:
             details = {**details, "actor": ctx.actor}
         tx.add_event(handoff_id, event, now, revision, details)
+        self._record({"type": f"handoff.{event}", "handoff_id": handoff_id, "revision": revision, "at": utc(now), "details": details})
 
     @staticmethod
     def _row(tx, handoff_id):
@@ -108,7 +157,7 @@ class BatonService:
     def push(self, request, ctx, now):
         def apply(tx, now):
             record = request["record"]
-            if tx.count_handoffs() >= MAX_HANDOFFS:
+            if tx.count_handoffs() >= self.policy_for(ctx).max_handoffs:
                 raise DomainError("STORE_FULL", "Handoff limit reached; delete old handoffs or set BATON_RETENTION_DAYS")
             if record["parent_id"]:
                 self._row(tx, record["parent_id"])
@@ -204,6 +253,8 @@ class BatonService:
             if effective_status(row, now) == "claimed":
                 raise DomainError("ALREADY_CLAIMED", "Release the active claim before deleting", row["revision"])
             tx.delete_handoff(row["id"])
+        self._emit(ctx, [{"type": "handoff.deleted", "handoff_id": row["id"], "reason": "request", "at": utc(now),
+                          "details": {"actor": ctx.actor} if ctx.actor else {}}])
         return {"id": request["id"], "deleted": True}, False
 
     # Memory tools
@@ -216,7 +267,13 @@ class BatonService:
             return memory.export(tx, request), False
 
     def memory_write(self, name, request, ctx, now):
-        data, replayed = self._write(ctx, "memory", name, request, now, lambda tx, now: memory.apply(tx, name, request, now))
+        limit = self.policy_for(ctx).max_memories
+        data, replayed = self._write(ctx, "memory", name, request, now, lambda tx, now: memory.apply(tx, name, request, now, limit))
+        if not replayed:
+            changed = [{k: item[k] for k in ("key", "action", "revision")} for item in data["items"] if item["action"] != "unchanged"]
+            if changed:
+                kind = "memory.forgotten" if name == "baton_memory_forget" else "memory.updated"
+                self._emit(ctx, [{"type": kind, "items": changed, "store_revision": data["store_revision"], "at": data["receipt_at"]}])
         if name == "baton_memory_update":
             # Echo coverage for the harness's report without retaining personal text in receipts.
             data = {**data, "coverage": request["coverage"]}
