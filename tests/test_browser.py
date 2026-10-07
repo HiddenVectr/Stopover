@@ -187,3 +187,71 @@ def test_dashboard_signs_in_when_the_server_requires_a_token(tmp_path, record):
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, record):
+    import socket
+    import threading
+    import time
+    from urllib.parse import quote
+    import uvicorn
+    from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
+    from starlette.routing import Route
+    from baton.context import RequestContext
+    from baton.server import create_app
+
+    async def auth(request):
+        return RequestContext(actor="alice") if request.cookies.get("sid") == "ok" else None
+
+    async def login(request):
+        target = quote(request.query_params.get("return_to", "/"))
+        return HTMLResponse(f'<h1>Host login</h1><a id="continue" href="/fake-login/complete?return_to={target}">Continue</a>')
+
+    async def complete(request):
+        response = RedirectResponse(request.query_params.get("return_to", "/"), status_code=303)
+        response.set_cookie("sid", "ok", httponly=True, samesite="lax")
+        return response
+
+    async def logout(request):
+        response = JSONResponse({}, status_code=200)
+        response.delete_cookie("sid")
+        return response
+
+    async def session(request):
+        return JSONResponse({"user": {"login": "alice", "name": "Alice Example"}, "workspace": {"name": "Alice's workspace"},
+                             "logout_url": "/fake-logout"})
+
+    app = create_app(tmp_path, auth=auth, login_url="/fake-login", extra_routes=[
+        Route("/fake-login", login), Route("/fake-login/complete", complete),
+        Route("/fake-logout", logout, methods=["POST"]), Route("/api/session", session)])
+    saved = app.state.service.execute("baton_push", {"record": record})["data"]
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    while not server.started:
+        time.sleep(0.05)
+    url = f"http://127.0.0.1:{port}"
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.goto(f"{url}/handoffs/{saved['id']}")
+            expect(page.get_by_role("heading", name="Host login")).to_be_visible()
+            assert f"return_to=%2Fhandoffs%2F{saved['id']}" in page.url
+            page.locator("#continue").click()
+            expect(page.locator("#detail h2")).to_have_text(record["title"])
+            expect(page.locator("#workspace-name")).to_have_text("Alice's workspace")
+            expect(page.locator("#workspace-detail")).to_have_text("Signed in as alice")
+            expect(page.locator("#signin-dialog")).not_to_be_visible()
+            page.get_by_role("button", name="Sign out").click()
+            expect(page.get_by_role("heading", name="Host login")).to_be_visible()
+            assert not errors, errors
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)

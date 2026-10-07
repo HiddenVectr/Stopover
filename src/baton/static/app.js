@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 const labels = { all: 'All handoffs', available: 'Ready to resume', claimed: 'In progress', completed: 'Completed' };
 const state = { status: 'all', selected: location.pathname.startsWith('/handoffs/') ? location.pathname.split('/')[2] : null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
 let toastTimer, searchTimer;
+let session = null;  // Set when the host serves /api/session.
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -59,9 +60,22 @@ function requireSignIn() {
   if (!$('signin-dialog').open) { $('signin-error').hidden = true; $('signin-dialog').showModal(); $('signin-token').focus(); }
 }
 
+function goToLogin(loginUrl) {
+  const target = new URL(loginUrl, location.origin);
+  if (target.origin !== location.origin) return false;  // Only follow same-origin login pages.
+  target.searchParams.set('return_to', location.pathname + location.search);
+  location.assign(target.href);
+  return true;
+}
+
 async function api(path, options = {}) {
-  const response = await fetch(path, { credentials: 'omit', cache: 'no-store', ...options, headers: { ...(options.headers || {}), ...authHeaders() } });
-  if (response.status === 401) { requireSignIn(); throw new Error('Sign in with an access token to continue.'); }
+  // Same-origin credentials let hosts that wrap Baton use session cookies; plain Baton sets none.
+  const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, headers: { ...(options.headers || {}), ...authHeaders() } });
+  if (response.status === 401) {
+    const body = await response.json().catch(() => ({}));
+    if (!body.login_url || !goToLogin(body.login_url)) requireSignIn();
+    throw new Error('Sign in to continue.');
+  }
   const data = await response.json();
   if (!response.ok || data.ok === false) throw new Error(data.error?.message || data.error || 'The local service could not complete this request.');
   return data;
@@ -311,7 +325,7 @@ const mcpUrl = new URL('/mcp', location.origin).href;
 $('mcp-url').textContent = mcpUrl;
 function updateAuthUI() {
   const signedIn = Boolean(accessToken());
-  $('signout-button').hidden = !signedIn;
+  $('signout-button').hidden = !signedIn && !session?.logout_url;
   // Show a placeholder rather than the real token so it never appears in screenshots or screen shares.
   $('codex-add').textContent = signedIn ? `export BATON_TOKEN=YOUR_TOKEN\ncodex mcp add baton --url ${mcpUrl} --bearer-token-env-var BATON_TOKEN` : `codex mcp add baton --url ${mcpUrl}`;
   $('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
@@ -337,7 +351,29 @@ $('signin-form').addEventListener('submit', async (event) => {
   } catch (exception) { $('signin-error').textContent = exception.message; $('signin-error').hidden = false; }
   finally { $('signin-submit').disabled = false; }
 });
-$('signout-button').addEventListener('click', () => { storeToken(''); requireSignIn(); });
+$('signout-button').addEventListener('click', async () => {
+  if (session?.logout_url) {
+    await fetch(session.logout_url, { method: 'POST', credentials: 'same-origin' }).catch(() => {});
+    location.assign('/');
+    return;
+  }
+  storeToken(''); requireSignIn();
+});
+
+// Hosts that add accounts can describe the signed-in user at /api/session; plain Baton answers 404.
+async function loadSession() {
+  try {
+    const response = await fetch('/api/session', { credentials: 'same-origin', cache: 'no-store', headers: authHeaders() });
+    if (!response.ok) return;
+    session = await response.json();
+    const name = session.user?.name || session.user?.login || 'Signed in';
+    $('workspace-name').textContent = session.workspace?.name || name;
+    $('workspace-detail').textContent = session.user?.login ? `Signed in as ${session.user.login}` : 'Signed in';
+    $('workspace-avatar').textContent = name.trim().charAt(0).toUpperCase() || '·';
+    if (session.logout_url) $('signout-button').hidden = false;
+  } catch { /* optional */ }
+}
+loadSession();
 $('copy-mcp-url').addEventListener('click', () => copy(mcpUrl));
 $('setup-button').addEventListener('click', () => $('setup-dialog').showModal());
 $('close-setup').addEventListener('click', () => $('setup-dialog').close());
