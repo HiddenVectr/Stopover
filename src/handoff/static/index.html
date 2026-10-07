@@ -18,7 +18,7 @@
         <button class="nav-item" data-status="claimed"><span><i class="dot claimed"></i>In progress</span><span class="count" id="count-claimed">0</span></button>
         <button class="nav-item" data-status="completed"><span><i class="dot completed"></i>Completed</span><span class="count" id="count-completed">0</span></button>
       </nav>
-      <div class="sidebar-bottom"><div class="local-status"><i class="dot available"></i><span>Hosted on your machine</span></div><button id="setup-button" class="subtle-button">Connect your agents <span>↗</span></button></div>
+      <div class="sidebar-bottom"><div class="local-status"><i class="dot available"></i><span>Self-hosted inbox</span></div><button id="setup-button" class="subtle-button">Connect your agents <span>↗</span></button></div>
     </aside>
     <main class="main">
       <header class="page-header"><div><p class="eyebrow">CONTEXT THAT CARRIES FORWARD</p><h1 id="page-title">All handoffs</h1><p class="muted">Pick up where your last agent left off.</p></div><button id="refresh-button" class="button secondary">↻ <span>Refresh</span></button></header>
@@ -31,7 +31,7 @@
       </div>
     </main>
   </div>
-  <dialog id="setup-dialog"><div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div><p class="muted">Add this local Streamable HTTP MCP server to your harness. No token or login is needed.</p><h3>MCP URL</h3><pre id="mcp-url"></pre><button id="copy-mcp-url" class="button secondary" type="button">Copy MCP URL</button><h3>Codex</h3><pre id="codex-add"></pre><h3>Claude Code</h3><pre id="claude-add"></pre><p class="small muted">In Cursor, OMP, or another compatible client, add an HTTP server with the URL above and authentication set to None. Open a fresh agent session, then ask it to upload a handoff.</p></dialog>
+  <dialog id="setup-dialog"><div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div><p class="muted">Add this Streamable HTTP MCP server to your harness. No token or login is needed.</p><h3>MCP URL</h3><pre id="mcp-url"></pre><button id="copy-mcp-url" class="button secondary" type="button">Copy MCP URL</button><h3>Codex</h3><pre id="codex-add"></pre><h3>Claude Code</h3><pre id="claude-add"></pre><p class="small muted">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None. Open a fresh agent session, then ask it to upload a handoff.</p></dialog>
   <dialog id="copy-dialog"><div class="dialog-heading"><h2>Copy this text</h2><button id="close-copy" class="icon-button" aria-label="Close copy text">×</button></div><p class="muted">Your browser couldn’t use the clipboard. The text is selected below; press Ctrl+C or ⌘C to copy it.</p><textarea id="copy-text" class="copy-text" aria-label="Text to copy" readonly></textarea></dialog>
   <div id="toast" role="status" class="toast" hidden></div>
 </body>

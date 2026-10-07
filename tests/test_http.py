@@ -23,26 +23,27 @@ def test_local_dashboard_and_api_need_no_token(tmp_path):
     assert not (tmp_path / "token").exists()
 
 
-@pytest.mark.parametrize("headers", [
-    {"host": "evil.example:8765"},
-    {"host": "localhost.evil.example:8765"},
-    {"host": "192.168.1.20:8765"},
-    {"host": "localhost:8765?bad=1"},
-    {"host": "localhost:8765#bad"},
-    {"host": "localhost:99999"},
-    {"origin": "null"},
-    {"origin": "https://evil.example"},
-    {"origin": "http://localhost:8766"},
-    {"sec-fetch-site": "cross-site"},
-    [("host", "127.0.0.1:8765"), ("host", "evil.example:8765")],
-    [("origin", "http://127.0.0.1:8765"), ("origin", "https://evil.example")],
+@pytest.mark.parametrize("base_url,origin", [
+    ("https://handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),
+    ("http://100.64.0.10:8765", "http://100.64.0.10:8765"),
+    ("https://handoff.example.com", "https://other.example.com"),
+    ("https://handoff.example.com", "null"),
 ])
-def test_tokenless_access_keeps_local_request_boundary(tmp_path, headers):
-    app = create_app(tmp_path)
-    with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+def test_remote_dashboard_and_api_accept_host_and_origin(tmp_path, base_url, origin):
+    with TestClient(create_app(tmp_path), base_url=base_url, headers={"origin": origin}) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/healthz").json()["ready"]
+        assert client.get("/api/handoffs").json()["data"]["items"] == []
+        assert client.get("/api/overview").status_code == 200
+        assert client.post("/mcp", content=b"x" * 65537).status_code == 413
+
+
+def test_cross_site_browser_requests_are_rejected(tmp_path):
+    with TestClient(create_app(tmp_path), base_url="https://handoff.example-tailnet.ts.net") as client:
+        headers = {"sec-fetch-site": "cross-site"}
         assert client.get("/api/handoffs", headers=headers).status_code == 403
         assert client.post("/mcp", json={}, headers=headers).status_code == 403
-        assert client.get("/api/overview", headers={"origin": "http://127.0.0.1:8765", "sec-fetch-site": "same-origin"}).status_code == 200
+        assert client.get("/api/overview", headers={"sec-fetch-site": "same-origin"}).status_code == 200
 
 
 def test_all_details_and_events_are_read_only(tmp_path, record):

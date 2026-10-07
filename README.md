@@ -1,8 +1,8 @@
 # Handoff
 
-A shared inbox for carrying tasks between **AI harnesses that support MCP**, including Codex, Claude Code, Cursor, and Oh My Pi (OMP). One Docker container runs the MCP server and web dashboard, with SQLite stored in a persistent Docker volume.
+A shared inbox for carrying tasks between **AI harnesses that support MCP**, including Codex, Claude Code, Cursor, Oh My Pi (OMP), and Hermes Agent. One Docker container runs the MCP server and web dashboard, with SQLite stored in a persistent Docker volume.
 
-AI harnesses connect directly to the server URL using **Streamable HTTP**. Localhost connections need no token or login. Docker runs on the server; clients do not need Docker, Python, or a process-launch command. Client names are labels, not an allowlist. Handoff stores task context and coordinates ownership; it does not launch agents or copy project files.
+AI harnesses connect directly to the server URL using **Streamable HTTP**. Connections need no Handoff token or login; remote deployments use Tailscale to control network access. Docker runs on the server; clients do not need Docker, Python, or a process-launch command. Client names are labels, not an allowlist. Handoff stores task context and coordinates ownership; it does not launch agents or copy project files.
 
 ## Start the server
 
@@ -19,6 +19,19 @@ Visit **http://127.0.0.1:8765** (or http://localhost:8765).
 
 The dashboard opens directly. Local MCP clients use the URL below with authentication set to **None**.
 
+### Host on your Tailscale network
+
+Run Docker and Tailscale on the same server. Keep the Compose port mapping on `127.0.0.1:8765:8080`, then publish it privately with:
+
+```sh
+sudo tailscale serve --bg http://127.0.0.1:8765
+tailscale serve status
+```
+
+Follow the HTTPS setup prompt if shown. Use the HTTPS URL printed by Serve for the dashboard, and append `/mcp` for your agents. The service accepts remote Host and Origin headers without an allowlist or hostname configuration. Use Tailscale access rules to restrict who can reach it; anyone with access can read and modify the shared inbox.
+
+See [Tailscale deployment](docs/remote-http.md) for server setup, client connections, verification, and updates. Tailscale Serve keeps access inside your tailnet and applies its access rules ([Tailscale documentation](https://tailscale.com/docs/features/tailscale-serve)).
+
 ## Connect an AI harness
 
 Every client uses the same connection details:
@@ -27,14 +40,14 @@ Every client uses the same connection details:
 | --- | --- |
 | Transport | Streamable HTTP (often labeled `http`) |
 | Local MCP URL | `http://127.0.0.1:8765/mcp` |
-| Remote MCP URL | Your server's HTTPS endpoint, for example `https://handoff.example.com/mcp` |
-| Local authentication | None — no token, headers, or environment variables |
+| Tailscale MCP URL | The Serve HTTPS URL plus `/mcp`, for example `https://myserver.example-tailnet.ts.net/mcp` |
+| Handoff authentication | None — no token, headers, or environment variables |
 
-**Current server limitation:** the shipped server accepts local Host headers only. The local URL works now; a remote HTTPS URL requires the server changes described in [Remote HTTP deployment](docs/remote-http.md). Changing a client's URL alone does not enable remote hosting. A future remote deployment will require HTTPS and authentication; the examples below are for localhost.
+For Tailscale hosting, replace `http://127.0.0.1:8765/mcp` in any example below with your Serve HTTPS URL plus `/mcp`. The machine or runtime making the MCP request must be able to reach your tailnet. Docker and Python are needed only on the Handoff server, not on clients.
 
-Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), or [generic MCP client](#generic-mcp-client).
+Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), [Hermes Agent](#hermes-agent), or [generic MCP client](#generic-mcp-client).
 
-For localhost, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Handoff registrations.
+For localhost or Tailscale, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Handoff registrations.
 
 Use the add command first where shown below; editing the configuration file is an alternative. Choose one method per client. When editing files, merge the example into existing configuration. Replace any old `handoff` entry using `command` and `args`; do not combine command-based and URL-based settings or create a duplicate registration.
 
@@ -139,9 +152,41 @@ OMP may discover an existing Handoff entry from another client. Check `/mcp list
 
 Reference: [Oh My Pi MCP configuration](https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md).
 
+### Hermes Agent
+
+**Option 1 — add command (recommended)**
+
+```bash
+hermes mcp add handoff --url http://127.0.0.1:8765/mcp
+hermes mcp list
+hermes mcp test handoff
+```
+
+For a Tailscale server, use its HTTPS endpoint instead:
+
+```bash
+hermes mcp add handoff --url https://myserver.example-tailnet.ts.net/mcp
+```
+
+Use your actual Serve hostname. If replacing an existing registration, run `hermes mcp remove handoff` first. No `--auth` option or login is needed.
+
+**Option 2 — edit YAML**
+
+Merge [clients/hermes.yaml](clients/hermes.yaml) into `~/.hermes/config.yaml` (or the `config.yaml` in your active `HERMES_HOME`):
+
+```yaml
+mcp_servers:
+  handoff:
+    url: "http://127.0.0.1:8765/mcp"
+```
+
+Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_handoff_handoff_push`. Ask it to list handoffs to verify a tool call, then use the upload/resume workflow below.
+
+References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
+
 ### Generic MCP client
 
-Add a server named `handoff`, select **Streamable HTTP**, enter `http://127.0.0.1:8765/mcp`, and leave authentication set to **None**. No command, token, or authorization header is needed.
+Add a server named `handoff`, select **Streamable HTTP**, enter `http://127.0.0.1:8765/mcp` or your Tailscale HTTPS endpoint, and leave authentication set to **None**. No command, token, or authorization header is needed.
 
 [clients/generic-http.json](clients/generic-http.json) illustrates a common JSON configuration shape. Adapt its wrapper to your harness; MCP does not define a universal client configuration file. Clients must support Streamable HTTP; legacy SSE-only clients need a compatible adapter.
 
@@ -159,7 +204,7 @@ An empty successful result is fine. A configured-server listing alone does not p
 
 - **Client asks for a token:** remove old `bearer_token_env_var` settings or `Authorization` headers, or remove and re-add the registration using the commands above. If the local server itself still returns 401, rebuild it with `docker compose up --build -d`.
 - **Connection refused:** verify the server is running and the URL is reachable from the harness. `127.0.0.1` always refers to the client's own machine or runtime; a remote harness needs a reachable server URL.
-- **HTTP 403:** the current server rejects non-local Host headers and unrelated browser origins. Follow the remote deployment requirements before using a public hostname.
+- **HTTP 403:** Handoff still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. Host and Origin headers are not validated. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
 - **Server registered but tools missing:** reload the MCP configuration or start a fresh client session, check that the server is enabled, and approve project configuration where required.
 - **Client still tries to run Docker:** remove the previous `command` and `args` entry and use the HTTP example for that client. The HTTP connection does not execute anything on the client.
 - **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 handoff` on the server.
@@ -232,7 +277,7 @@ The `handoff_handoff_data` local Docker volume contains SQLite. Container replac
 
 For a backup, stop the service cleanly, copy the whole volume (including SQLite sidecars) to protected local storage, and restart. Restore into a separate volume while stopped and verify SQLite integrity before using it. Backups include task context and active claim credentials. An old access-token file may remain from earlier versions; this version does not read or create it. Individual deletion, automatic retention and encrypted database storage are not part of this MVP.
 
-The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Handoff contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs through MCP. Local connections require no authentication. Keep the published port on loopback; non-local hosts and unrelated browser origins remain rejected.
+The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Handoff contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs through MCP. Handoff requires no authentication and does not validate Host or Origin headers. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
 
 ## Development and tests
 
@@ -244,7 +289,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. Tests use isolated temporary stores and subprocesses. They cover retry safety, simultaneous claims, lease fencing, transaction rollback, reopen durability, validation, real HTTP/stdio MCP round trips, token-free local access, Host/Origin rejection, search, filters, deep links, copy actions, mobile overflow and inert rendering of hostile text.
+On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. Tests use isolated temporary stores and subprocesses. They cover retry safety, simultaneous claims, lease fencing, transaction rollback, reopen durability, validation, real HTTP/stdio MCP round trips, token-free local and remote-header access, cross-site browser request rejection, search, filters, deep links, copy actions, mobile overflow and inert rendering of hostile text.
 
 Local development without Docker:
 
@@ -256,6 +301,6 @@ Never run a second owner against an active data directory. Production packages a
 
 ## References and scope
 
-The original proposal is retained in [outputs/docs/mvp-v1.md](outputs/docs/mvp-v1.md) as historical planning material. The service exposes a shared MCP inbox for harnesses supporting Streamable HTTP. The older stdio bridge remains a compatibility option; the documented client setup uses direct HTTP. The client instructions above cover Codex, Claude Code, Cursor, OMP, and generic clients; they are not an exhaustive compatibility list. Remote HTTPS hosting is the intended deployment model alongside local hosting; its server-side configuration is still pending as described in [Remote HTTP deployment](docs/remote-http.md). Automatic agent launching, vector search and separate per-user access controls are outside this build. See [docs/implementation.md](docs/implementation.md) for implementation notes and recorded verification; setup examples do not imply every client has been tested end to end.
+The original proposal is retained in [outputs/docs/mvp-v1.md](outputs/docs/mvp-v1.md) as historical planning material. The service exposes a shared MCP inbox for harnesses supporting Streamable HTTP. The older stdio bridge remains a compatibility option; the documented client setup uses direct HTTP. The client instructions above cover Codex, Claude Code, Cursor, OMP, Hermes Agent, and generic clients; they are not an exhaustive compatibility list. Remote HTTPS hosting through Tailscale Serve is described in [Tailscale deployment](docs/remote-http.md). Automatic agent launching, vector search and separate per-user access controls are outside this build. See [docs/implementation.md](docs/implementation.md) for implementation notes and recorded verification; setup examples do not imply every client has been tested end to end.
 
 Client-specific references are linked in each setup section. The server uses the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).

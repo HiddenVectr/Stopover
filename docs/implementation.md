@@ -1,6 +1,6 @@
 # Implementation notes
 
-Handoff exposes token-free localhost Streamable HTTP for direct URL-based connections from AI harnesses. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), and generic configuration. The original proposal is historical. The current HTTP boundary remains local-only; [remote HTTP deployment](remote-http.md) describes the intended URL-based hosting model and server changes awaiting approval.
+Handoff exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. The original proposal is historical. Host and Origin validation is disabled in both the HTTP middleware and MCP SDK. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
 
 The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same five schemas and preserve structured results and MCP error flags.
 
@@ -8,12 +8,12 @@ Natural-language upload guidance is included in both the server initialization i
 
 SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts and use revision/generation/token checks. The read-only web API uses these same store methods, with a separate paginated event history.
 
-The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. Host/Origin validation, cross-site browser request rejection, and a 64 KiB body limit protect the local HTTP boundary. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
+The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. The middleware retains cross-site browser request rejection and a 64 KiB body limit. Host/Origin validation and the MCP SDK DNS rebinding checks are disabled for direct remote URL access. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
 
 Differences from the planning document:
 
 - A few nonessential source fields now have stable defaults, so agents can create a concise handoff without inventing metadata. Objective, current state, next steps and acceptance criteria remain required.
-- Local access requires no token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
+- Local and private network access require no Handoff token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
 - The dashboard adds read-only HTTP endpoints and opens without a login. Agent writes remain MCP-only.
 - Count limits protect the small local store; an exact 1 GiB filesystem quota is not implemented. Disk-full errors fail the transaction; monitor the volume and back it up.
 - Tests cover the implemented contracts; the proposal's broad fault-injection/performance matrix is not represented as fully certified.
@@ -22,7 +22,7 @@ Source records are immutable. A completed record remains visible and browsable. 
 
 ## Verification
 
-The updated suite passes all 31 tests, including browser coverage. Current localhost behavior is exercised without credentials: API/dashboard reads, the full HTTP/stdio handoff lifecycle, and direct dashboard loading. Boundary tests cover non-local and malformed hosts, foreign or duplicate origins, and cross-site browser requests. Remote access remains unimplemented.
+All 29 tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and remote Host/Origin headers over real MCP HTTP connections. Remote cases cover a Tailscale hostname, a tailnet IP, and unrelated or opaque origins, with initialization, tool discovery, upload and retrieval. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
 
 ### Historical verification before local token removal
 

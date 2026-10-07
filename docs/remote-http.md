@@ -1,27 +1,97 @@
-# Remote HTTP deployment
+# Host Handoff on your Tailscale network
 
-## Connection model
+Run the Handoff container on your server and use Tailscale Serve to provide a private HTTPS endpoint. Each AI harness connects directly using Streamable HTTP. Clients need network access to your tailnet, but no Docker, Python, SSH tunnel, or stdio bridge.
 
-Each AI harness connects to `https://<your-hostname>/mcp` with the server's access token. The harness does not need Docker, Python, SSH, a shared filesystem, or a stdio bridge. Locally, clients use `http://127.0.0.1:8765/mcp` without authentication. Authentication is required for the proposed remote mode, not for localhost. See the [client setup guide](../README.md#connect-an-ai-harness).
+```text
+AI harness on your tailnet
+  -> https://<server>.<tailnet>.ts.net/mcp
+  -> Tailscale Serve on the server
+  -> http://127.0.0.1:8765/mcp
+  -> Handoff container + persistent SQLite volume
+```
 
-## Current status
+## Access model
 
-The server already implements token-free localhost Streamable HTTP at `/mcp`. Its HTTP middleware and MCP SDK settings currently allow only local Host headers, and Compose publishes the service on `127.0.0.1:8765`. Consequently, adding a DNS record or putting a reverse proxy in front of the current build is not enough: a request preserving the public Host is rejected.
+Handoff requires no connection token or login and does not validate HTTP Host or Origin headers. There is no hostname allowlist or `HANDOFF_PUBLIC_URL` setting. Access is controlled by Tailscale and the server's network configuration. Anyone allowed to reach Handoff can read and mutate its shared inbox; there are no separate user permissions inside the application.
 
-The client examples now use direct HTTP. The server changes below are proposed and **have not been applied or deployed**.
+Keep Docker's published port bound to loopback (`127.0.0.1:8765:8080`) and use **Tailscale Serve**. Tailscale Funnel publishes services to the internet and is unsuitable for this token-free deployment. Restrict tailnet access to the server's HTTPS port (443) to your intended users/devices. [Tailscale Serve applies tailnet access rules](https://tailscale.com/docs/features/tailscale-serve).
 
-## Proposed server change for approval
+The 64 KiB request limit, response security headers, and rejection of browser requests marked `Sec-Fetch-Site: cross-site` remain enabled. No cross-origin browser CORS support is added. These checks do not replace network access control.
 
-- Add `HANDOFF_PUBLIC_URL`, an explicit HTTPS origin such as `https://handoff.example.com`, and pass it through Compose. Leave local-only behavior unchanged when it is unset.
-- Validate that the value is an HTTPS origin without credentials, a path, query, fragment, or wildcard. The MCP endpoint is that origin plus `/mcp`.
-- Allow the configured public authority in both the application boundary and MCP SDK host validation. Continue rejecting other hosts and unrelated browser origins.
-- Terminate HTTPS at a reverse proxy on the server and forward to `127.0.0.1:8765`, preserving the original Host and Authorization headers. Keep the application port bound to loopback. TLS certificates and DNS must belong to the approved hostname.
-- Add authentication for every remote MCP request and protect remote dashboard access. Localhost connections remain token-free. Remote access must not inherit the localhost authentication exemption merely because a proxy connects from loopback.
-- Show remote authentication instructions in the dashboard when remote mode is enabled. The local dashboard already displays the URL and requires no login.
-- Test remote-host MCP initialization, tool discovery and calls, rejection of invalid/missing tokens and unapproved hosts/origins, secure dashboard sessions, and existing local connections.
+## 1. Prepare the server
 
-The public hostname and permission to enable it are needed before applying the server change. No remote server, domain, or certificate has been provisioned.
+Install Docker Engine with Compose and [Tailscale](https://tailscale.com/docs/install), then join the server to your tailnet. Use a local Docker daemon on that server. The existing Compose file requires Docker Engine 28+ or current Docker Desktop.
 
-## Access scope
+Authenticate Git on the server with an account that can read the private repository, then clone and start it:
 
-The current local deployment is one shared inbox available to local clients without credentials. The proposed remote deployment would require an access token; any holder could read handoffs and use mutation tools, subject to the claim lifecycle. Separate users, per-client permissions, OAuth authorization, and a public multi-tenant service are not implemented. Remote clients also need their own access to any project files required by the task; MCP carries the saved context, not the workspace.
+```sh
+git clone https://github.com/HiddenVectr/Handoff.git
+cd Handoff
+docker compose up --build -d
+docker compose ps
+curl --fail http://127.0.0.1:8765/healthz
+```
+
+The health response should contain `"ready": true`. The named Docker volume stores handoffs across container replacements. A fresh server starts with its own store; cloning the repository does not copy handoffs from another machine. To move existing data, follow the [backup and restore guidance](../README.md#storage-restart-and-backup).
+
+## 2. Enable private HTTPS
+
+On the same server:
+
+```sh
+sudo tailscale serve --bg http://127.0.0.1:8765
+tailscale serve status
+```
+
+Follow the HTTPS enablement link if Tailscale prints one. Serve supplies a certificate and prints the actual URL, for example `https://myserver.example-tailnet.ts.net`. Substitute that actual hostname everywhere below. No Handoff environment variable or code change is needed for a different server name.
+
+`--bg` keeps the Serve configuration active across Tailscale and server restarts. The container uses `restart: unless-stopped`; ensure Docker and Tailscale start with the host. If Serve already routes another application on port 443, inspect its configuration before assigning the root path to Handoff. See the [Serve CLI reference](https://tailscale.com/docs/reference/tailscale-cli/serve).
+
+## 3. Connect your harnesses
+
+Use these settings from devices permitted by your tailnet rules:
+
+| Setting | Value |
+| --- | --- |
+| Transport | Streamable HTTP |
+| MCP URL | `https://myserver.example-tailnet.ts.net/mcp` |
+| Authentication | None |
+| Dashboard | `https://myserver.example-tailnet.ts.net/` |
+
+Follow the [client setup instructions](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, OMP, Hermes Agent, or a generic client. Replace the localhost URL with the MCP URL above in either the add command or configuration file. Remove obsolete token settings from older registrations.
+
+The process making the MCP connection must have tailnet access. For a remote agent, container, VM, or hosted harness, check connectivity from that runtime; having Tailscale on your laptop alone does not give a cloud agent access. Clients must support Streamable HTTP or use a compatible adapter.
+
+## 4. Verify from a client device
+
+```sh
+curl --fail https://myserver.example-tailnet.ts.net/healthz
+```
+
+Open the dashboard at the same origin, then ask your harness:
+
+> Use Handoff's handoff_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
+
+An empty successful result is valid. Confirm discovery of all five tools. To save context, say:
+
+> Upload a handoff so I can continue this conversation later.
+
+## Updates and troubleshooting
+
+Update the server checkout and rebuild:
+
+```sh
+git pull --ff-only
+docker compose up --build -d
+docker compose ps
+```
+
+The data volume is preserved. Do not run `docker compose down -v` unless you intend to delete its handoffs.
+
+- If the local health check fails, inspect `docker logs --tail 50 handoff` and `docker compose ps`.
+- If local health works but the HTTPS check fails, inspect `tailscale status`, `tailscale serve status`, the client's tailnet connection, and access rules for port 443.
+- If a client still receives `Invalid local Host` or `Origin not allowed`, it is reaching an older Handoff build. Pull and rebuild on the server.
+- If Handoff returns `Cross-site request not allowed`, open the dashboard directly at its Serve URL. Native MCP clients normally omit Fetch Metadata headers.
+- If a harness discovers no tools, verify that it uses the `/mcp` endpoint and Streamable HTTP, then reload its MCP configuration or start a new session.
+
+MCP transfers saved task context, not project files. Receiving agents need their own access to any workspace required to continue the work.

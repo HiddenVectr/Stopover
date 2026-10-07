@@ -4,7 +4,6 @@ import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import anyio
 import mcp.types as types
@@ -86,8 +85,8 @@ class MCPRoute:
         await self.manager.handle_request(scope, receive, send)
 
 
-class LocalBoundary:
-    """Check every HTTP request before it reaches static pages, API or MCP."""
+class RequestBoundary:
+    """Limit request bodies and apply browser protections across HTTP routes."""
     def __init__(self, app):
         self.app = app
 
@@ -95,18 +94,6 @@ class LocalBoundary:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         headers = dict(scope["headers"])
-        raw_host = headers.get(b"host", b"").decode("latin1").lower()
-        origin = headers.get(b"origin", b"").decode("latin1")
-        try:
-            host = urlsplit("http://" + raw_host)
-            valid_host = host.hostname in ("localhost", "127.0.0.1", "::1") and not host.username and not host.password and not host.path and not host.query and not host.fragment and host.port is not None and host.port > 0
-        except ValueError:
-            valid_host = False
-        if not valid_host or sum(k == b"host" for k, v in scope["headers"]) != 1:
-            return await JSONResponse({"error": "Invalid local Host"}, status_code=403)(scope, receive, send)
-        if (sum(k == b"origin" for k, v in scope["headers"]) > 1
-                or (origin and origin not in ("http://" + raw_host, "https://" + raw_host))):
-            return await JSONResponse({"error": "Origin not allowed"}, status_code=403)(scope, receive, send)
         # Native MCP clients do not send Fetch Metadata. Reject cross-site browser
         # requests even when a browser omits Origin (for example an image GET).
         if headers.get(b"sec-fetch-site", b"").lower() == b"cross-site":
@@ -145,10 +132,9 @@ def create_app(directory=None):
     directory = directory or os.environ.get("HANDOFF_DATA_DIR", "/data")
     store = Store(directory)
     server = make_mcp(store)
+    # Deployment controls access through loopback publishing and Tailscale Serve.
     manager = StreamableHTTPSessionManager(app=server, json_response=True, stateless=True, max_request_body_size=65536,
-        security_settings=TransportSecuritySettings(enable_dns_rebinding_protection=True,
-            allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
-            allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]))
+        security_settings=TransportSecuritySettings(enable_dns_rebinding_protection=False))
 
     @asynccontextmanager
     async def lifespan(app):
@@ -199,5 +185,5 @@ def create_app(directory=None):
         Route("/api/handoffs/{id}", detail), Route("/api/handoffs/{id}/events", events),
         Route("/mcp", MCPRoute(manager)), Mount("/assets", app=StaticFiles(directory=STATIC))], lifespan=lifespan)
     app.state.store = store
-    app.add_middleware(LocalBoundary)
+    app.add_middleware(RequestBoundary)
     return app

@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 
 import httpx
+import pytest
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
@@ -51,3 +52,30 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
                 assert replay.structuredContent["replayed"]
                 bad = await source.call_tool("handoff_push", {"operation_id": "invalid", "record": record})
                 assert bad.isError and bad.structuredContent["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.parametrize("host,origin", [
+    ("handoff.example-tailnet.ts.net", None),
+    ("handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),
+    ("100.64.0.10:8765", "http://100.64.0.10:8765"),
+    ("handoff.example.com", "https://other.example.com"),
+    ("handoff.example.com", "null"),
+])
+async def test_remote_mcp_headers_support_upload_and_read(live_server, record, host, origin):
+    # Model a reverse proxy forwarding the original Host and Origin to loopback.
+    headers = {"host": host}
+    if origin is not None:
+        headers["origin"] = origin
+    async with httpx.AsyncClient(headers=headers) as http:
+        async with streamable_http_client(live_server["url"] + "/mcp", http_client=http) as (read, write, _):
+            async with ClientSession(read, write) as client:
+                await client.initialize()
+                assert len((await client.list_tools()).tools) == 5
+                pushed = await client.call_tool("handoff_push", {"operation_id": str(uuid.uuid4()), "record": record})
+                assert not pushed.isError, pushed
+                handoff_id = pushed.structuredContent["data"]["id"]
+                fetched = await client.call_tool("handoff_get", {"id": handoff_id})
+                assert not fetched.isError, fetched
+                context = fetched.structuredContent["data"]["record"]["context"]
+                for key, value in record["context"].items():
+                    assert context[key] == value
