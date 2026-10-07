@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "handoff": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "handoff",
+        "python",
+        "-m",
+        "handoff",
+        "bridge"
+      ]
+    }
+  }
+}

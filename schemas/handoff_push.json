@@ -1,0 +1,559 @@
+{
+  "$defs": {
+    "Attempt": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Action",
+          "type": "string"
+        },
+        "result": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Result",
+          "type": "string"
+        },
+        "verification": {
+          "default": "reported",
+          "enum": [
+            "observed",
+            "reported",
+            "not_run"
+          ],
+          "title": "Verification",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9._-]{1,80}$",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Evidence Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "action",
+        "result"
+      ],
+      "title": "Attempt",
+      "type": "object"
+    },
+    "Authorization": {
+      "additionalProperties": false,
+      "properties": {
+        "user_request_excerpt": {
+          "default": "",
+          "title": "User Request Excerpt",
+          "type": "string"
+        },
+        "scope": {
+          "default": "Follow the receiving user's current instructions.",
+          "title": "Scope",
+          "type": "string"
+        },
+        "requires_confirmation": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Requires Confirmation",
+          "type": "array"
+        }
+      },
+      "title": "Authorization",
+      "type": "object"
+    },
+    "Context": {
+      "additionalProperties": false,
+      "properties": {
+        "objective": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Objective",
+          "type": "string"
+        },
+        "current_state": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Current State",
+          "type": "string"
+        },
+        "next_steps": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Next Steps",
+          "type": "array"
+        },
+        "acceptance_criteria": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Acceptance Criteria",
+          "type": "array"
+        },
+        "background": {
+          "default": "",
+          "title": "Background",
+          "type": "string"
+        },
+        "constraints": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Constraints",
+          "type": "array"
+        },
+        "decisions": {
+          "items": {
+            "$ref": "#/$defs/Decision"
+          },
+          "maxItems": 20,
+          "title": "Decisions",
+          "type": "array"
+        },
+        "attempts": {
+          "items": {
+            "$ref": "#/$defs/Attempt"
+          },
+          "maxItems": 20,
+          "title": "Attempts",
+          "type": "array"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/Fact"
+          },
+          "maxItems": 20,
+          "title": "Facts",
+          "type": "array"
+        },
+        "open_questions": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Open Questions",
+          "type": "array"
+        },
+        "resume_instructions": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Resume Instructions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "objective",
+        "current_state",
+        "next_steps",
+        "acceptance_criteria"
+      ],
+      "title": "Context",
+      "type": "object"
+    },
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "default": "Summary of context available to the source agent.",
+          "title": "Basis",
+          "type": "string"
+        },
+        "omitted": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Omitted",
+          "type": "array"
+        }
+      },
+      "title": "Coverage",
+      "type": "object"
+    },
+    "Decision": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Decision",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9._-]{1,80}$",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Evidence Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "decision",
+        "reason"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "Fact": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "basis": {
+          "default": "reported",
+          "enum": [
+            "observed",
+            "reported",
+            "assumption"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "pattern": "^[A-Za-z0-9._-]{1,80}$",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Evidence Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "Fact",
+      "type": "object"
+    },
+    "Record": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "project_key": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9._-]{1,80}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Project Key"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "target_client": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Client"
+        },
+        "coverage": {
+          "$ref": "#/$defs/Coverage"
+        },
+        "authorization": {
+          "$ref": "#/$defs/Authorization"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "maxItems": 20,
+          "title": "References",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title",
+        "source",
+        "context"
+      ],
+      "title": "Record",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9._-]{1,80}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "url",
+            "file",
+            "repository",
+            "conversation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "availability": {
+          "default": "unknown",
+          "enum": [
+            "source_only",
+            "recipient_expected",
+            "unknown"
+          ],
+          "title": "Availability",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "locator",
+        "purpose"
+      ],
+      "title": "Reference",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Client",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "conversation_ref": {
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Ref"
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Captured At"
+        },
+        "authoring_method": {
+          "default": "agent_summary",
+          "enum": [
+            "agent_summary",
+            "human_summary"
+          ],
+          "title": "Authoring Method",
+          "type": "string"
+        },
+        "transfer_method": {
+          "default": "direct_mcp",
+          "enum": [
+            "direct_mcp",
+            "manual_import",
+            "local_test"
+          ],
+          "title": "Transfer Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9._-]{1,80}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "action": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Action",
+          "type": "string"
+        },
+        "done_when": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Done When",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "done_when"
+      ],
+      "title": "Step",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "record": {
+      "$ref": "#/$defs/Record"
+    }
+  },
+  "required": [
+    "operation_id",
+    "record"
+  ],
+  "title": "Push",
+  "type": "object"
+}

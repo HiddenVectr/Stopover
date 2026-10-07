@@ -1,0 +1,219 @@
+{
+  "$defs": {
+    "AcceptanceResult": {
+      "additionalProperties": false,
+      "properties": {
+        "criterion": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Criterion",
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "pass",
+            "fail",
+            "not_run"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "evidence": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Evidence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "criterion",
+        "result",
+        "evidence"
+      ],
+      "title": "AcceptanceResult",
+      "type": "object"
+    },
+    "Completion": {
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "enum": [
+            "succeeded",
+            "blocked",
+            "abandoned"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "acceptance_results": {
+          "items": {
+            "$ref": "#/$defs/AcceptanceResult"
+          },
+          "maxItems": 10,
+          "title": "Acceptance Results",
+          "type": "array"
+        },
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "maxItems": 10,
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "remaining_work": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Remaining Work",
+          "type": "array"
+        }
+      },
+      "required": [
+        "outcome",
+        "summary"
+      ],
+      "title": "Completion",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z0-9._-]{1,80}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "url",
+            "file",
+            "repository",
+            "conversation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "availability": {
+          "default": "unknown",
+          "enum": [
+            "source_only",
+            "recipient_expected",
+            "unknown"
+          ],
+          "title": "Availability",
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Excerpt"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "locator",
+        "purpose"
+      ],
+      "title": "Reference",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "expected_revision": {
+      "minimum": 1,
+      "title": "Expected Revision",
+      "type": "integer"
+    },
+    "claim_token": {
+      "maxLength": 128,
+      "minLength": 32,
+      "title": "Claim Token",
+      "type": "string"
+    },
+    "claim_generation": {
+      "minimum": 1,
+      "title": "Claim Generation",
+      "type": "integer"
+    },
+    "completion": {
+      "$ref": "#/$defs/Completion"
+    }
+  },
+  "required": [
+    "operation_id",
+    "id",
+    "expected_revision",
+    "claim_token",
+    "claim_generation",
+    "completion"
+  ],
+  "title": "Complete",
+  "type": "object"
+}

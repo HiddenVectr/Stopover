@@ -1,0 +1,71 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "default": "available",
+      "enum": [
+        "available",
+        "claimed",
+        "completed",
+        "all"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "project_key": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9._-]{1,80}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Project Key"
+    },
+    "target_client": {
+      "anyOf": [
+        {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Client"
+    },
+    "q": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Q",
+      "type": "string"
+    },
+    "limit": {
+      "default": 20,
+      "maximum": 20,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "cursor": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cursor"
+    }
+  },
+  "title": "ListQuery",
+  "type": "object"
+}

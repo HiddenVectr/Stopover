@@ -1,0 +1,22 @@
+{
+  "url": "http://127.0.0.1:8765",
+  "docker_health": "healthy",
+  "loopback_only": true,
+  "windows_loopback_verified": true,
+  "installed_files_match_reviewed_build": 34,
+  "automated_suite_passed": 19,
+  "final_backend_suite_passed": 18,
+  "docker_http_stdio_roundtrip": true,
+  "persisted_after_restart": true,
+  "claude_code_connected": true,
+  "codex_registration_enabled": true,
+  "live_dashboard_browser_checked": true,
+  "live_handoff_counts": {
+    "available": 1,
+    "claimed": 0,
+    "completed": 1
+  },
+  "welcome_id": "25b47beb-74bf-4dea-9942-88f621cba3a5",
+  "protocol_check_id": "04e9b706-eb65-414a-a8b9-d6aea6a21700",
+  "model_to_model_conversation_tested": false
+}

@@ -1,0 +1,92 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "expected_revision": {
+      "minimum": 1,
+      "title": "Expected Revision",
+      "type": "integer"
+    },
+    "action": {
+      "default": "acquire",
+      "enum": [
+        "acquire",
+        "renew",
+        "release"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "holder_label": {
+      "anyOf": [
+        {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Holder Label"
+    },
+    "lease_seconds": {
+      "anyOf": [
+        {
+          "maximum": 3600,
+          "minimum": 60,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lease Seconds"
+    },
+    "claim_token": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 32,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Claim Token"
+    },
+    "claim_generation": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Claim Generation"
+    }
+  },
+  "required": [
+    "operation_id",
+    "id",
+    "expected_revision"
+  ],
+  "title": "Claim",
+  "type": "object"
+}

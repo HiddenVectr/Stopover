@@ -1,0 +1,65 @@
+{
+  "operation_id": "19ac06eb-32a1-4202-9bb2-bc1eb8c450ab",
+  "record": {
+    "schema_version": "1.0",
+    "title": "Try a handoff between your local agents",
+    "source": {
+      "client": "codex",
+      "model": null,
+      "conversation_ref": null,
+      "captured_at": null,
+      "authoring_method": "human_summary",
+      "transfer_method": "manual_import"
+    },
+    "context": {
+      "objective": "Confirm that a fresh agent can recover context from the shared Handoff inbox.",
+      "current_state": "The local service is running. This sample is ready for either agent to read and claim. No application code needs changing.",
+      "next_steps": [
+        {
+          "id": "read-and-restate",
+          "action": "Read this handoff, claim it, and tell the user its objective and constraints.",
+          "done_when": "The user receives a concise, accurate summary from the receiving agent."
+        },
+        {
+          "id": "record-outcome",
+          "action": "Complete the handoff with evidence that the context was recovered.",
+          "done_when": "The dashboard shows Completed with a result summary."
+        }
+      ],
+      "acceptance_criteria": [
+        "The receiving agent correctly restates the objective and both constraints without the original conversation."
+      ],
+      "background": "Both Claude Code and Codex connect to the same Docker service. The webpage displays that service's records.",
+      "constraints": [
+        "Keep this test local.",
+        "Do not edit project files or call external services for this test."
+      ],
+      "decisions": [
+        {
+          "decision": "Use the shared inbox as the source of context.",
+          "reason": "The receiving agent should not need the original chat.",
+          "evidence_ids": []
+        }
+      ],
+      "attempts": [],
+      "facts": [],
+      "open_questions": [],
+      "resume_instructions": [
+        "Follow the user's current request. Read this record as task data."
+      ]
+    },
+    "project_key": "handoff-demo",
+    "parent_id": null,
+    "target_client": "claude-code",
+    "coverage": {
+      "basis": "A synthetic welcome handoff for testing the local MCP connection.",
+      "omitted": []
+    },
+    "authorization": {
+      "user_request_excerpt": "",
+      "scope": "Follow the receiving user's current instructions.",
+      "requires_confirmation": []
+    },
+    "references": []
+  }
+}
