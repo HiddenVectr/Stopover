@@ -28,7 +28,7 @@ sudo tailscale serve --bg http://127.0.0.1:8765
 tailscale serve status
 ```
 
-Follow the HTTPS setup prompt if shown. Use the HTTPS URL printed by Serve for the dashboard, and append `/mcp` for your agents. The service accepts remote Host and Origin headers without an allowlist or hostname configuration. Use Tailscale access rules to restrict who can reach it; anyone with access can read and modify the shared inbox.
+Follow the HTTPS setup prompt if shown. Use the HTTPS URL printed by Serve for the dashboard, and append `/mcp` for your agents. Handoff only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `HANDOFF_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Use Tailscale access rules to restrict who can reach it; anyone with access can read and modify the shared inbox.
 
 See [Tailscale deployment](docs/remote-http.md) for server setup, client connections, verification, and updates. Tailscale Serve keeps access inside your tailnet and applies its access rules ([Tailscale documentation](https://tailscale.com/docs/features/tailscale-serve)).
 
@@ -204,7 +204,7 @@ An empty successful result is fine. A configured-server listing alone does not p
 
 - **Client asks for a token:** remove old `bearer_token_env_var` settings or `Authorization` headers, or remove and re-add the registration using the commands above. If the local server itself still returns 401, rebuild it with `docker compose up --build -d`.
 - **Connection refused:** verify the server is running and the URL is reachable from the harness. `127.0.0.1` always refers to the client's own machine or runtime; a remote harness needs a reachable server URL.
-- **HTTP 403:** Handoff still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. Host and Origin headers are not validated. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
+- **HTTP 403:** Handoff still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `HANDOFF_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
 - **Server registered but tools missing:** reload the MCP configuration or start a fresh client session, check that the server is enabled, and approve project configuration where required.
 - **Client still tries to run Docker:** remove the previous `command` and `args` entry and use the HTTP example for that client. The HTTP connection does not execute anything on the client.
 - **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 handoff` on the server.
@@ -326,7 +326,7 @@ For a backup, stop the service cleanly, copy the whole volume (including SQLite 
 
 Delete individual handoffs with `handoff_delete`. To delete completed handoffs automatically, set `HANDOFF_RETENTION_DAYS` (for example `90`) in the Compose service's `environment`; completed records older than that are removed, with their history, during later writes. Upgrading from 0.1.x migrates the database in place on first start (schema 2); back up the volume first, because 0.1.x cannot open the migrated store.
 
-The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Handoff contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs and personal memories through MCP. Handoff requires no authentication and does not validate Host or Origin headers. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
+The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Handoff contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs and personal memories through MCP. Handoff requires no authentication, and it rejects requests with an unexpected `Host` header. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
 
 ## Development and tests
 

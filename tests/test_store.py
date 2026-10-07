@@ -299,3 +299,10 @@ def test_resume_claims_and_returns_record(store, push, record):
     assert done["ok"], done
     assert store.execute("handoff_resume", {"id": handoff["id"], "holder_label": "codex"})["error"]["code"] == "ALREADY_COMPLETED"
     assert len(store.db.execute("SELECT result FROM receipts WHERE tool='handoff_resume'").fetchone()[0]) < 2000
+
+
+def test_resume_receipt_token_is_scrubbed_when_claim_ends(store, push):
+    handoff = push()
+    token = store.execute("handoff_resume", {"operation_id": str(uuid.uuid4()), "id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
+    store.execute("handoff_complete", {"id": handoff["id"], "claim_token": token, "completion": {"outcome": "abandoned", "summary": "Stopped"}})
+    assert token not in "\n".join(store.db.iterdump())

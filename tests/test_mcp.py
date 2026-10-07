@@ -60,9 +60,8 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
 @pytest.mark.parametrize("host,origin", [
     ("handoff.example-tailnet.ts.net", None),
     ("handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),
-    ("100.64.0.10:8765", "http://100.64.0.10:8765"),
-    ("handoff.example.com", "https://other.example.com"),
-    ("handoff.example.com", "null"),
+    ("desktop.example-tailnet.ts.net:8445", "https://other.example.com"),
+    ("localhost:8765", "null"),
 ])
 async def test_remote_mcp_headers_support_upload_and_read(live_server, record, host, origin):
     # Model a reverse proxy forwarding the original Host and Origin to loopback.

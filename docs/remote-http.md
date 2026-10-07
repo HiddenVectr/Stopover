@@ -12,7 +12,7 @@ AI harness on your tailnet
 
 ## Access model
 
-Handoff requires no connection token or login and does not validate HTTP Host or Origin headers. There is no hostname allowlist or `HANDOFF_PUBLIC_URL` setting. Access is controlled by Tailscale and the server's network configuration. Anyone allowed to reach Handoff can read and mutate its shared inbox; there are no separate user permissions inside the application.
+Handoff requires no connection token or login. Handoff only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `HANDOFF_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Access is otherwise controlled by Tailscale and the server's network configuration. Anyone allowed to reach Handoff can read and mutate its shared inbox; there are no separate user permissions inside the application.
 
 Keep Docker's published port bound to loopback (`127.0.0.1:8765:8080`) and use **Tailscale Serve**. Tailscale Funnel publishes services to the internet and is unsuitable for this token-free deployment. Restrict tailnet access to the server's HTTPS port (443) to your intended users/devices. [Tailscale Serve applies tailnet access rules](https://tailscale.com/docs/features/tailscale-serve).
 
@@ -90,7 +90,7 @@ The data volume is preserved. Do not run `docker compose down -v` unless you int
 
 - If the local health check fails, inspect `docker logs --tail 50 handoff` and `docker compose ps`.
 - If local health works but the HTTPS check fails, inspect `tailscale status`, `tailscale serve status`, the client's tailnet connection, and access rules for port 443.
-- If a client still receives `Invalid local Host` or `Origin not allowed`, it is reaching an older Handoff build. Pull and rebuild on the server.
+- If a client receives `Host not allowed`, it is using a hostname or IP outside the allowlist. Use the `*.ts.net` Serve URL, or add the name to `HANDOFF_ALLOWED_HOSTS` and restart the container.
 - If Handoff returns `Cross-site request not allowed`, open the dashboard directly at its Serve URL. Native MCP clients normally omit Fetch Metadata headers.
 - If a harness discovers no tools, verify that it uses the `/mcp` endpoint and Streamable HTTP, then reload its MCP configuration or start a new session.
 

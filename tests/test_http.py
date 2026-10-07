@@ -25,9 +25,8 @@ def test_local_dashboard_and_api_need_no_token(tmp_path):
 
 @pytest.mark.parametrize("base_url,origin", [
     ("https://handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),
-    ("http://100.64.0.10:8765", "http://100.64.0.10:8765"),
-    ("https://handoff.example.com", "https://other.example.com"),
-    ("https://handoff.example.com", "null"),
+    ("https://handoff.example-tailnet.ts.net:8445", "https://other.example.com"),
+    ("http://localhost:8765", "null"),
 ])
 def test_remote_dashboard_and_api_accept_host_and_origin(tmp_path, base_url, origin):
     with TestClient(create_app(tmp_path), base_url=base_url, headers={"origin": origin}) as client:

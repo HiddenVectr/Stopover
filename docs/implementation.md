@@ -1,6 +1,6 @@
 # Implementation notes
 
-Handoff exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. The original proposal is historical. Host and Origin validation is disabled in both the HTTP middleware and MCP SDK. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
+Handoff exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. The original proposal is historical. A Host allowlist (loopback names and `*.ts.net` by default, extended with `HANDOFF_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
 
 The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same eleven tool schemas and five prompts and preserve structured results and MCP error flags.
 
@@ -8,7 +8,7 @@ Natural-language upload guidance is included in both the server initialization i
 
 SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts. Only a SHA-256 hash of each claim token is stored, and the token alone authorizes renew/release/complete; an expired lease keeps working until another agent acquires the handoff. Mutation timestamps never move backward, even if the system clock does. Receipts expire after 7 days. The read-only web API uses these same store methods, with a separate paginated event history.
 
-The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. The middleware retains cross-site browser request rejection and a 64 KiB body limit. Host/Origin validation and the MCP SDK DNS rebinding checks are disabled for direct remote URL access. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
+The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. The middleware retains cross-site browser request rejection and a 64 KiB body limit. Unexpected Host headers are rejected, which blocks DNS rebinding. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
 
 Differences from the planning document:
 
@@ -20,9 +20,26 @@ Differences from the planning document:
 
 Source records are immutable. A completed record remains visible and browsable. The service does not transfer private model reasoning or assume that a source agent's text authorizes recipient actions.
 
+## Architecture and extension points
+
+The code is layered so a hosted build can reuse everything except storage and access control:
+
+| Module | Role |
+| --- | --- |
+| `context.py` | `RequestContext(workspace, actor)`: who is asking. Local requests use workspace `local`. |
+| `domain.py` | Storage-independent rules: summaries, cursors, claim verification, acceptance-criteria matching, errors. |
+| `backend.py` | The storage contract: `Backend.transaction(ctx, write)` yields a `Transaction` scoped to one workspace, with rows as plain dicts. |
+| `sqlite_backend.py` | The local backend: single owner, single workspace, all SQL and migrations. Other workspaces get `UNKNOWN_WORKSPACE`. |
+| `service.py`, `memory.py` | `HandoffService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
+| `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. `core_registry().copy()` can be extended with more tools. |
+| `server.py` | `create_app(service=, auth=, allowed_hosts=, extra_routes=, middleware=)`. `auth` is an async callable that maps a request to a `RequestContext` (or `None` for 401) for `/mcp` and `/api/*`; MCP handlers and the dashboard API pass that context to the service, and events record its `actor`. |
+| `store.py` | `Store`: the local deployment (`HandoffService` over SQLite), kept for existing imports. |
+
+A hosted build depends on this package and supplies its own `Backend` (for example Postgres with a workspace column), an authenticator, and any extra tools or routes. Tests guard the boundary: the service layer never references SQLite.
+
 ## Personal memory implementation
 
-`memory_store.py` adds personal-memory rows, a global monotonic revision, and separate idempotency receipts to the existing SQLite database. Initialization is additive for existing schema-2 stores. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
+`memory.py` holds the personal-memory rules; the backend stores memory rows, a global monotonic revision, and separate idempotency receipts to the existing SQLite database. Initialization is additive for existing schema-2 stores. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
 
 Read/export pagination binds a cursor to its filters and the first page's store revision, which every page reports as the checkpoint. Concurrent writes do not abort pagination; they carry higher revisions, so the next incremental read returns them. Incremental reads include deleted IDs, including through filters where erased content cannot be matched. Exports are paginated and expose a completion flag and continuation cursor.
 
@@ -32,6 +49,6 @@ The existing dashboard adds a Personal memories view with full-text display, top
 
 ## Verification
 
-All tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and remote Host/Origin headers over real MCP HTTP connections. Remote cases cover a Tailscale hostname, a tailnet IP, and unrelated or opaque origins, with initialization, tool discovery, upload and retrieval. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
+All tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and allowed remote Host/Origin headers over real MCP HTTP connections, with initialization, tool discovery, upload and retrieval. Unknown hosts are rejected on every route, and the allowlist can be extended or disabled. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
 
 Dashboard screenshots: [desktop](dashboard.png), [mobile](dashboard-mobile.png).
