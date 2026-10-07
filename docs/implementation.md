@@ -33,6 +33,9 @@ The code is layered so a hosted build can reuse everything except storage and ac
 | `service.py`, `memory.py` | `BatonService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
 | `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. `core_registry().copy()` can be extended with more tools. |
 | `server.py` | `create_app(service=, auth=, allowed_hosts=, extra_routes=, middleware=)`. `auth` is an async callable that maps a request to a `RequestContext` (or `None` for 401) for `/mcp` and `/api/*`; MCP handlers and the dashboard API pass that context to the service, and events record its `actor`. |
+| `domain.Policy` | Per-workspace limits and retention. `BatonService(policy=...)` takes a `Policy` or a function of the `RequestContext`, so a hosted build can vary limits by plan. |
+| `on_event` | `BatonService(on_event=...)` receives events such as `handoff.pushed`, `handoff.completed` and `memory.updated` after each commit (never on replays or rollbacks). Events carry IDs, revisions and the actor, never handoff or memory content; handler errors are logged and ignored. |
+| `testing.py` | The backend conformance suite. A project with its own `Backend` runs it with `from baton.testing import *` and a `make_service` fixture (install the `testing` extra). Baton runs it against SQLite in `tests/test_conformance.py`. |
 | `store.py` | `Store`: the local deployment (`BatonService` over SQLite), kept for existing imports. |
 
 A hosted build depends on this package and supplies its own `Backend` (for example Postgres with a workspace column), an authenticator, and any extra tools or routes. Tests guard the boundary: the service layer never references SQLite.
