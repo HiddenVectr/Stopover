@@ -11,7 +11,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 
-async def call_remote(directory, url, name, arguments):
+async def call_remote(url, name, arguments):
     async with httpx.AsyncClient(timeout=30) as http:
         async with streamable_http_client(url, http_client=http) as (read, write, _):
             async with ClientSession(read, write) as session:
@@ -48,7 +48,7 @@ def main():
             uvicorn.run(create_app(args.data_dir), host=args.host, port=args.port, access_log=False, log_level="warning", timeout_graceful_shutdown=15)
         elif args.command == "bridge":
             from .bridge import bridge
-            asyncio.run(bridge(args.data_dir, args.url))
+            asyncio.run(bridge(args.url))
         else:
             if args.command == "seed-demo":
                 from .sample import sample_record
@@ -65,7 +65,7 @@ def main():
                 name = "handoff_push"
             else:
                 name, arguments = "handoff_get", {"id": args.id}
-            result = asyncio.run(call_remote(args.data_dir, args.url, name, arguments))
+            result = asyncio.run(call_remote(args.url, name, arguments))
             print(json.dumps(result, indent=2, ensure_ascii=False))
     except (Exception, KeyboardInterrupt) as exc:
         # Exception payloads can contain credentials or source material. Keep stderr generic.

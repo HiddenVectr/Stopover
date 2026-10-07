@@ -16,7 +16,9 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from .models import INPUTS, bounded_json
+from .models import DEFAULT_LEASE, INPUTS, bounded_json
+
+RECEIPT_TTL = 7 * 86400  # Retries older than this are treated as new requests.
 
 
 def utc(value=None):
@@ -25,6 +27,14 @@ def utc(value=None):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+
+
+def token_hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def normalized(text):
+    return " ".join(text.split()).casefold()
 
 
 class DomainError(Exception):
@@ -57,10 +67,11 @@ class OwnerLock:
 
 
 class Store:
-    def __init__(self, directory, clock=time.time):
+    def __init__(self, directory, clock=time.time, retention_days=None):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.clock = clock
+        self.retention_days = retention_days
         self.lock = threading.RLock()
         self.owner = OwnerLock(self.directory / "owner.lock")
         try:
@@ -87,6 +98,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS receipts (
                   tool TEXT NOT NULL, operation TEXT NOT NULL, request_hash TEXT NOT NULL,
                   handoff_id TEXT NOT NULL REFERENCES handoffs(id), result TEXT NOT NULL,
+                  at REAL NOT NULL DEFAULT 0,
                   PRIMARY KEY(tool,operation)
                 );
                 CREATE TABLE IF NOT EXISTS events (
@@ -99,9 +111,12 @@ class Store:
                 CREATE INDEX IF NOT EXISTS handoff_events ON events(handoff_id,sequence DESC);
             """)
             version = self.db.execute("SELECT value FROM meta WHERE key='schema'").fetchone()
-            if version and version[0] != "1":
+            if version and version[0] == "1":
+                self._migrate_v1()
+            elif version and version[0] != "2":
                 raise RuntimeError("Unsupported database schema; restore a compatible Handoff version")
-            self.db.execute("INSERT OR IGNORE INTO meta VALUES ('schema','1')")
+            self.db.execute("INSERT OR IGNORE INTO meta VALUES ('schema','2')")
+            self.db.execute("CREATE INDEX IF NOT EXISTS receipt_age ON receipts(at)")
             if self.db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise RuntimeError("SQLite integrity check failed")
         except Exception:
@@ -110,10 +125,31 @@ class Store:
             self.owner.close()
             raise
 
+    def _migrate_v1(self):
+        """v2 adds receipt timestamps and stores only hashes of claim tokens."""
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            if "at" not in [c["name"] for c in self.db.execute("PRAGMA table_info(receipts)")]:
+                self.db.execute("ALTER TABLE receipts ADD COLUMN at REAL NOT NULL DEFAULT 0")
+            self.db.execute("UPDATE receipts SET at=?", (self.clock(),))
+            for row in self.db.execute("SELECT id,token FROM handoffs WHERE token IS NOT NULL").fetchall():
+                self.db.execute("UPDATE handoffs SET token=? WHERE id=?", (token_hash(row["token"]), row["id"]))
+            self.db.execute("""UPDATE receipts SET result=json_remove(result,'$.claim_token') WHERE tool='handoff_claim'
+                               AND handoff_id NOT IN (SELECT id FROM handoffs WHERE status='claimed')""")
+            self.db.execute("UPDATE meta SET value='2' WHERE key='schema'")
+            self.db.execute("COMMIT")
+        except BaseException:
+            self.db.execute("ROLLBACK")
+            raise
+
     def close(self):
         with self.lock:
             self.db.close()
             self.owner.close()
+
+    def ping(self):
+        with self.lock:
+            self.db.execute("SELECT 1").fetchone()
 
     def execute(self, name, arguments):
         try:
@@ -128,12 +164,20 @@ class Store:
                 elif name == "handoff_list":
                     data = self._list(request, now)
                     replayed = False
+                elif name == "handoff_delete":
+                    data = self._delete(request["id"], now)
+                    replayed = False
+                elif name == "handoff_resume":
+                    # The receipt holds only the claim; the record is attached fresh so replays show current state.
+                    claim, replayed = self._mutate(name, request, now)
+                    data = self._get(request["id"], now)
+                    data.update(claim_token=claim.get("claim_token"), claim_generation=claim["claim_generation"], receipt_at=claim["receipt_at"])
                 else:
                     data, replayed = self._mutate(name, request, now)
                 return {"ok": True, "data": data, "server_time": utc(now), "replayed": replayed}
         except ValidationError as exc:
-            fields = [".".join(map(str, e["loc"])) or "record" for e in exc.errors(include_input=False)]
-            return self._error("VALIDATION_ERROR", "Invalid fields: " + ", ".join(fields[:12]))
+            problems = [f'{".".join(map(str, e["loc"])) or "request"}: {e["msg"][:200]}' for e in exc.errors(include_input=False)]
+            return self._error("VALIDATION_ERROR", "; ".join(problems[:8]))
         except DomainError as exc:
             return self._error(exc.code, str(exc), exc.revision)
         except (ValueError, TypeError):
@@ -216,35 +260,70 @@ class Store:
         return {"items": items, "next_cursor": next_cursor}
 
     def _mutate(self, name, request, now):
-        operation = request["operation_id"]
+        # Without a caller-supplied operation ID the request still succeeds, but a retry is a new request.
+        operation = request["operation_id"] or str(uuid.uuid4())
         digest = hashlib.sha256(canonical({k: v for k, v in request.items() if k != "operation_id"}).encode()).hexdigest()
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            # Keep stored times monotonic if the system clock steps backward.
+            last_time = self.db.execute("SELECT value FROM meta WHERE key='last_time'").fetchone()
+            if last_time:
+                now = max(now, float(last_time[0]))
+            self._prune(now)
             previous = self.db.execute("SELECT * FROM receipts WHERE tool=? AND operation=?", (name, operation)).fetchone()
             if previous:
                 if previous["request_hash"] != digest:
                     raise DomainError("IDEMPOTENCY_CONFLICT", "This operation ID was already used with different arguments")
                 self.db.execute("COMMIT")
                 return json.loads(previous["result"]), True
-            last_time = self.db.execute("SELECT value FROM meta WHERE key='last_time'").fetchone()
-            if last_time and now + 5 < float(last_time[0]):
-                raise DomainError("CLOCK_MOVED_BACKWARD", "Correct the system clock before changing handoffs")
             if self.db.execute("SELECT count(*) FROM receipts").fetchone()[0] >= 250000:
-                raise DomainError("STORE_FULL", "Receipt limit reached; back up the store")
+                raise DomainError("STORE_FULL", "Receipt limit reached; retry later or back up the store")
             if name == "handoff_push":
                 data = self._push(request, now)
             else:
                 row = self._row(request["id"])
                 if row["status"] == "completed":
                     raise DomainError("ALREADY_COMPLETED", "This handoff is already complete", row["revision"])
-                if row["revision"] != request["expected_revision"]:
+                if request["expected_revision"] is not None and row["revision"] != request["expected_revision"]:
                     raise DomainError("REVISION_CONFLICT", "Get the current handoff before retrying", row["revision"])
-                data = self._claim(request, row, now) if name == "handoff_claim" else self._complete(request, row, now)
+                if name == "handoff_complete":
+                    data = self._complete(request, row, now)
+                else:
+                    data = self._claim({"action": "acquire", **request}, row, now)
             data["receipt_at"] = utc(now)
-            self.db.execute("INSERT INTO receipts VALUES (?,?,?,?,?)", (name, operation, digest, data["id"], canonical(data)))
+            self.db.execute("INSERT INTO receipts VALUES (?,?,?,?,?,?)", (name, operation, digest, data["id"], canonical(data), now))
             self.db.execute("INSERT OR REPLACE INTO meta VALUES ('last_time',?)", (str(now),))
             self.db.execute("COMMIT")
             return data, False
+        except BaseException:
+            if self.db.in_transaction:
+                self.db.execute("ROLLBACK")
+            raise
+
+    def _prune(self, now):
+        self.db.execute("DELETE FROM receipts WHERE at<?", (now - RECEIPT_TTL,))
+        if self.retention_days:
+            for row in self.db.execute("SELECT id FROM handoffs WHERE status='completed' AND updated<?",
+                                       (now - self.retention_days * 86400,)).fetchall():
+                self._purge(row["id"])
+
+    def _purge(self, handoff_id):
+        for table, column in (("events", "handoff_id"), ("receipts", "handoff_id"), ("handoffs", "id")):
+            self.db.execute(f"DELETE FROM {table} WHERE {column}=?", (handoff_id,))
+
+    def _scrub_tokens(self, handoff_id):
+        # Acquire receipts keep the raw token only while that claim can still be retried.
+        self.db.execute("UPDATE receipts SET result=json_remove(result,'$.claim_token') WHERE handoff_id=? AND tool='handoff_claim'", (handoff_id,))
+
+    def _delete(self, handoff_id, now):
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._row(handoff_id)
+            if self.effective(row, now) == "claimed":
+                raise DomainError("ALREADY_CLAIMED", "Release the active claim before deleting", row["revision"])
+            self._purge(handoff_id)
+            self.db.execute("COMMIT")
+            return {"id": handoff_id, "deleted": True}
         except BaseException:
             if self.db.in_transaction:
                 self.db.execute("ROLLBACK")
@@ -257,7 +336,7 @@ class Store:
     def _push(self, request, now):
         record = request["record"]
         if self.db.execute("SELECT count(*) FROM handoffs").fetchone()[0] >= 10000:
-            raise DomainError("STORE_FULL", "Handoff limit reached; back up the store")
+            raise DomainError("STORE_FULL", "Handoff limit reached; delete old handoffs or set HANDOFF_RETENTION_DAYS")
         if record["parent_id"]:
             self._row(record["parent_id"])
         payload = bounded_json(record)
@@ -270,10 +349,12 @@ class Store:
         return {"id": handoff_id, "revision": 1, "status": "available", "record_sha256": digest}
 
     def _verify_claim(self, request, row, now):
-        if row["status"] != "claimed" or row["expires"] <= now:
-            raise DomainError("CLAIM_EXPIRED", "The claim is absent or expired; acquire again", row["revision"])
-        if row["generation"] != request["claim_generation"] or not hmac.compare_digest(row["token"], request["claim_token"]):
-            raise DomainError("INVALID_CLAIM", "These claim credentials do not own the handoff", row["revision"])
+        # An expired lease still works until another agent acquires the handoff; the new token fences it out.
+        if row["status"] != "claimed":
+            raise DomainError("CLAIM_EXPIRED", "No claim is held (it was released or never acquired); acquire again", row["revision"])
+        generation = request["claim_generation"]
+        if (generation is not None and row["generation"] != generation) or not hmac.compare_digest(row["token"], token_hash(request["claim_token"])):
+            raise DomainError("INVALID_CLAIM", "These claim credentials do not own the handoff; another agent may have acquired it", row["revision"])
 
     def _claim(self, request, row, now):
         action, revision = request["action"], row["revision"] + 1
@@ -282,13 +363,15 @@ class Store:
             if self.effective(row, now) == "claimed":
                 raise DomainError("ALREADY_CLAIMED", "Another agent holds an active claim", row["revision"])
             token = secrets.token_urlsafe(32)
+            self._scrub_tokens(row["id"])
             self.db.execute("UPDATE handoffs SET status='claimed',holder=?,token=?,expires=?,generation=generation+1,revision=?,updated=? WHERE id=?",
-                            (request["holder_label"], token, now + (request["lease_seconds"] or 900), revision, now, row["id"]))
+                            (request["holder_label"], token_hash(token), now + (request["lease_seconds"] or DEFAULT_LEASE), revision, now, row["id"]))
         else:
             self._verify_claim(request, row, now)
             if action == "renew":
-                self.db.execute("UPDATE handoffs SET expires=?,revision=?,updated=? WHERE id=?", (now + (request["lease_seconds"] or 900), revision, now, row["id"]))
+                self.db.execute("UPDATE handoffs SET expires=?,revision=?,updated=? WHERE id=?", (now + (request["lease_seconds"] or DEFAULT_LEASE), revision, now, row["id"]))
             else:
+                self._scrub_tokens(row["id"])
                 self.db.execute("UPDATE handoffs SET status='available',holder=NULL,token=NULL,expires=NULL,revision=?,updated=? WHERE id=?", (revision, now, row["id"]))
         updated = self._row(row["id"])
         data = self._summary(updated, now)
@@ -302,10 +385,23 @@ class Store:
         self._verify_claim(request, row, now)
         completion = request["completion"]
         criteria = json.loads(row["record"])["context"]["acceptance_criteria"]
-        results = completion["acceptance_results"]
+        expected = "Original criteria: " + "; ".join(f"[{i}] {text[:160]}" for i, text in enumerate(criteria))
+        lookup = {normalized(text): i for i, text in enumerate(criteria)}
+        results = []
+        for result in completion["acceptance_results"]:
+            index = result["index"]
+            if index is not None and index >= len(criteria):
+                raise DomainError("VALIDATION_ERROR", f"Criterion index {index} does not exist. {expected}")
+            if index is None:
+                index = lookup.get(normalized(result["criterion"]))
+            results.append({**result, "index": index, "criterion": criteria[index]} if index is not None else result)
+        completion = {**completion, "acceptance_results": results}
         if completion["outcome"] == "succeeded":
-            if len(results) != len(criteria) or {r["criterion"] for r in results} != set(criteria) or any(r["result"] != "pass" for r in results):
-                raise DomainError("VALIDATION_ERROR", "Success requires one pass with evidence for every original acceptance criterion")
+            if sorted(r["index"] for r in results if r["index"] is not None) != list(range(len(criteria))) or len(results) != len(criteria):
+                raise DomainError("VALIDATION_ERROR", f"Success needs exactly one result per original criterion, identified by index or text. {expected}")
+            if any(r["result"] != "pass" for r in results):
+                raise DomainError("VALIDATION_ERROR", "Success requires every criterion to pass; use blocked or abandoned otherwise")
+        self._scrub_tokens(row["id"])
         revision = row["revision"] + 1
         self.db.execute("UPDATE handoffs SET status='completed',token=NULL,completion=?,revision=?,updated=? WHERE id=?", (canonical(completion), revision, now, row["id"]))
         self._event(row["id"], "completed", now, revision, {"outcome": completion["outcome"], "holder_label": row["holder"]})

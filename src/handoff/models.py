@@ -2,22 +2,38 @@
 from __future__ import annotations
 
 import json
+import re
+import uuid
 from datetime import datetime
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StringConstraints, WithJsonSchema, model_validator
+
+
+def _uuid(value):
+    # Agents often send uppercase or non-v4 UUIDs; accept any UUID and store it canonically.
+    try:
+        return str(uuid.UUID(value))
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError("must be a UUID such as 3f2b6c1e-8d4a-4b7e-9c2d-1a5e6f7b8c9d") from None
+
+
+def _slug(value):
+    return re.sub(r"\s+", "-", value.strip()) if isinstance(value, str) else value
+
 
 Text = Annotated[str, StringConstraints(min_length=1, max_length=8192)]
 Short = Annotated[str, StringConstraints(min_length=1, max_length=160)]
-Slug = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,80}$")]
-UUID4 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")]
+Slug = Annotated[str, BeforeValidator(_slug), StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,80}$")]
+UUID = Annotated[str, BeforeValidator(_uuid), WithJsonSchema({"type": "string", "format": "uuid"})]
 Texts = Annotated[list[Text], Field(max_length=20)]
-Positive = Annotated[int, Field(strict=True, ge=1)]
+Positive = Annotated[int, Field(ge=1)]
+Token = Annotated[str, StringConstraints(min_length=32, max_length=128)]
 
 
 class Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
+    model_config = ConfigDict(extra="forbid")
 
 
 class Source(Model):
@@ -138,7 +154,7 @@ class Record(Model):
     source: Source
     context: Context
     project_key: Slug | None = None
-    parent_id: UUID4 | None = None
+    parent_id: UUID | None = None
     target_client: Short | None = None
     coverage: Coverage = Field(default_factory=Coverage)
     authorization: Authorization = Field(default_factory=Authorization)
@@ -162,9 +178,17 @@ class Record(Model):
 
 
 class AcceptanceResult(Model):
-    criterion: Text
+    """Identify the original criterion by index (0-based), text, or both."""
+    index: Annotated[int, Field(ge=0, le=9)] | None = None
+    criterion: Text | None = None
     result: Literal["pass", "fail", "not_run"]
     evidence: Text
+
+    @model_validator(mode="after")
+    def identified(self):
+        if self.index is None and self.criterion is None:
+            raise ValueError("Give the criterion index (0-based) or its text")
+        return self
 
 
 class Completion(Model):
@@ -181,12 +205,12 @@ class Completion(Model):
 
 
 class Push(Model):
-    operation_id: UUID4
+    operation_id: UUID | None = None
     record: Record
 
 
 class Get(Model):
-    id: UUID4
+    id: UUID
 
 
 class ListQuery(Model):
@@ -194,18 +218,22 @@ class ListQuery(Model):
     project_key: Slug | None = None
     target_client: Short | None = None
     q: Annotated[str, StringConstraints(max_length=200)] = ""
-    limit: Annotated[int, Field(strict=True, ge=1, le=20)] = 20
+    limit: Annotated[int, Field(ge=1, le=20)] = 20
     cursor: Annotated[str, StringConstraints(max_length=2048)] | None = None
 
 
+DEFAULT_LEASE = 3600
+MAX_LEASE = 86400
+
+
 class Claim(Model):
-    operation_id: UUID4
-    id: UUID4
-    expected_revision: Positive
+    operation_id: UUID | None = None
+    id: UUID
+    expected_revision: Positive | None = None
     action: Literal["acquire", "renew", "release"] = "acquire"
     holder_label: Short | None = None
-    lease_seconds: Annotated[int, Field(strict=True, ge=60, le=3600)] | None = None
-    claim_token: Annotated[str, StringConstraints(min_length=32, max_length=128)] | None = None
+    lease_seconds: Annotated[int, Field(ge=60, le=MAX_LEASE)] | None = None
+    claim_token: Token | None = None
     claim_generation: Positive | None = None
 
     @model_validator(mode="after")
@@ -213,21 +241,33 @@ class Claim(Model):
         if self.action == "acquire":
             if not self.holder_label or self.claim_token is not None or self.claim_generation is not None:
                 raise ValueError("Acquire requires holder_label and no claim credentials")
-        elif not self.claim_token or self.claim_generation is None or self.holder_label is not None:
-            raise ValueError("Renew/release require claim_token and claim_generation, with no holder_label")
+        elif not self.claim_token or self.holder_label is not None:
+            raise ValueError("Renew/release require claim_token, with no holder_label")
         if self.action == "release" and self.lease_seconds is not None:
             raise ValueError("Release cannot set a lease")
         return self
 
 
+class Resume(Model):
+    operation_id: UUID | None = None
+    id: UUID
+    holder_label: Short
+    lease_seconds: Annotated[int, Field(ge=60, le=MAX_LEASE)] | None = None
+    expected_revision: Positive | None = None
+
+
 class Complete(Model):
-    operation_id: UUID4
-    id: UUID4
-    expected_revision: Positive
-    claim_token: Annotated[str, StringConstraints(min_length=32, max_length=128)]
-    claim_generation: Positive
+    operation_id: UUID | None = None
+    id: UUID
+    expected_revision: Positive | None = None
+    claim_token: Token
+    claim_generation: Positive | None = None
     completion: Completion
 
 
+class Delete(Model):
+    id: UUID
+
+
 INPUTS = {"handoff_push": Push, "handoff_list": ListQuery, "handoff_get": Get,
-          "handoff_claim": Claim, "handoff_complete": Complete}
+          "handoff_claim": Claim, "handoff_resume": Resume, "handoff_complete": Complete, "handoff_delete": Delete}

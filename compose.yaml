@@ -2,7 +2,7 @@ name: handoff
 services:
   handoff:
     build: .
-    image: handoff-local:0.1.0
+    image: handoff-local:0.2.0
     container_name: handoff
     restart: unless-stopped
     ports:

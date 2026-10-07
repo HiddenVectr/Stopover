@@ -13,7 +13,7 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
     args["record"]["title"] = "Carry the release checklist into Claude Code"
     args["record"]["context"]["background"] = '<img src=x onerror="window.handoffInjected=true">'
     args["record"]["context"]["facts"] = [{"text": "The adapter was checked locally.", "basis": "observed", "evidence_ids": []}]
-    saved = asyncio.run(call_remote(live_server["directory"], live_server["url"] + "/mcp", "handoff_push", args))
+    saved = asyncio.run(call_remote(live_server["url"] + "/mcp", "handoff_push", args))
     handoff_id = saved["data"]["id"]
     screenshots = Path(os.environ.get("HANDOFF_SCREENSHOT_DIR", "/tmp/handoff-screenshots"))
     screenshots.mkdir(parents=True, exist_ok=True)

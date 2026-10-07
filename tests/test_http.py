@@ -58,3 +58,12 @@ def test_all_details_and_events_are_read_only(tmp_path, record):
         assert client.get("/api/handoffs/" + saved["id"]).json()["data"]["revision"] == 1
         assert client.get("/api/handoffs?limit=oops").status_code == 400
         assert client.get("/api/handoffs/not-an-id").status_code == 400
+
+
+def test_committed_schemas_match_models():
+    import json
+    from pathlib import Path
+    from handoff.models import INPUTS, Record
+    schemas = Path(__file__).resolve().parents[1] / "schemas"
+    for name, model in {**INPUTS, "record": Record}.items():
+        assert json.loads((schemas / f"{name}.json").read_text()) == model.model_json_schema(), name

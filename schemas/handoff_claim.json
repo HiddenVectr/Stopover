@@ -2,19 +2,35 @@
   "additionalProperties": false,
   "properties": {
     "operation_id": {
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-      "title": "Operation Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
     },
     "id": {
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "format": "uuid",
       "title": "Id",
       "type": "string"
     },
     "expected_revision": {
-      "minimum": 1,
-      "title": "Expected Revision",
-      "type": "integer"
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Revision"
     },
     "action": {
       "default": "acquire",
@@ -43,7 +59,7 @@
     "lease_seconds": {
       "anyOf": [
         {
-          "maximum": 3600,
+          "maximum": 86400,
           "minimum": 60,
           "type": "integer"
         },
@@ -83,9 +99,7 @@
     }
   },
   "required": [
-    "operation_id",
-    "id",
-    "expected_revision"
+    "id"
   ],
   "title": "Claim",
   "type": "object"

@@ -2,12 +2,35 @@
   "$defs": {
     "AcceptanceResult": {
       "additionalProperties": false,
+      "description": "Identify the original criterion by index (0-based), text, or both.",
       "properties": {
+        "index": {
+          "anyOf": [
+            {
+              "maximum": 9,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index"
+        },
         "criterion": {
-          "maxLength": 8192,
-          "minLength": 1,
-          "title": "Criterion",
-          "type": "string"
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Criterion"
         },
         "result": {
           "enum": [
@@ -26,7 +49,6 @@
         }
       },
       "required": [
-        "criterion",
         "result",
         "evidence"
       ],
@@ -89,7 +111,6 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "pattern": "^[A-Za-z0-9._-]{1,80}$",
           "title": "Id",
           "type": "string"
         },
@@ -177,19 +198,35 @@
   "additionalProperties": false,
   "properties": {
     "operation_id": {
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-      "title": "Operation Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
     },
     "id": {
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "format": "uuid",
       "title": "Id",
       "type": "string"
     },
     "expected_revision": {
-      "minimum": 1,
-      "title": "Expected Revision",
-      "type": "integer"
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Revision"
     },
     "claim_token": {
       "maxLength": 128,
@@ -198,20 +235,25 @@
       "type": "string"
     },
     "claim_generation": {
-      "minimum": 1,
-      "title": "Claim Generation",
-      "type": "integer"
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Claim Generation"
     },
     "completion": {
       "$ref": "#/$defs/Completion"
     }
   },
   "required": [
-    "operation_id",
     "id",
-    "expected_revision",
     "claim_token",
-    "claim_generation",
     "completion"
   ],
   "title": "Complete",

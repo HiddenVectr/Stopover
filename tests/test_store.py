@@ -142,3 +142,160 @@ def test_store_reopen_and_owner_lock(tmp_path, record):
         assert reopened.db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     finally:
         reopened.close()
+
+
+def test_expired_claim_completes_until_someone_else_acquires(store, push, record):
+    clock = [2_000_000_000.0]
+    store.clock = lambda: clock[0]
+    handoff = push()
+    token = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex", "lease_seconds": 60})["data"]["claim_token"]
+    clock[0] += 3600
+    assert store.execute("handoff_get", {"id": handoff["id"]})["data"]["effective_status"] == "available"
+    renewed = store.execute("handoff_claim", {"id": handoff["id"], "action": "renew", "claim_token": token, "lease_seconds": 60})
+    assert renewed["ok"] and renewed["data"]["claim"]["active"]
+    clock[0] += 3600
+    results = [{"index": i, "result": "pass", "evidence": "Observed"} for i in range(len(record["context"]["acceptance_criteria"]))]
+    done = store.execute("handoff_complete", {"id": handoff["id"], "claim_token": token,
+                                              "completion": {"outcome": "succeeded", "summary": "Finished late", "acceptance_results": results}})
+    assert done["ok"], done
+
+
+def test_expired_claim_is_fenced_after_new_acquire(store, push):
+    clock = [2_000_000_000.0]
+    store.clock = lambda: clock[0]
+    handoff = push()
+    old = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex", "lease_seconds": 60})["data"]["claim_token"]
+    clock[0] += 61
+    assert store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "claude-code"})["ok"]
+    late = store.execute("handoff_complete", {"id": handoff["id"], "claim_token": old,
+                                              "completion": {"outcome": "blocked", "summary": "Too late"}})
+    assert late["error"]["code"] == "INVALID_CLAIM"
+
+
+def test_lease_limits(store, push):
+    handoff = push()
+    assert store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex", "lease_seconds": 86401})["error"]["code"] == "VALIDATION_ERROR"
+    claimed = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]
+    assert claimed["claim"]["expires_at"] == store.execute("handoff_get", {"id": handoff["id"]})["data"]["claim"]["expires_at"]
+
+
+def test_criteria_by_index_or_reworded_text(store, record):
+    record["context"]["acceptance_criteria"] = ["Tests pass", "Docs   updated"]
+    handoff = store.execute("handoff_push", {"record": record})["data"]
+    token = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
+    base = {"id": handoff["id"], "claim_token": token}
+    missing = store.execute("handoff_complete", {**base, "completion": {"outcome": "succeeded", "summary": "Done",
+        "acceptance_results": [{"criterion": "Tests pass", "result": "pass", "evidence": "pytest"}]}})
+    assert missing["error"]["code"] == "VALIDATION_ERROR" and "[1] Docs   updated" in missing["error"]["message"]
+    bad_index = store.execute("handoff_complete", {**base, "completion": {"outcome": "succeeded", "summary": "Done",
+        "acceptance_results": [{"index": 5, "result": "pass", "evidence": "pytest"}]}})
+    assert "index 5" in bad_index["error"]["message"]
+    done = store.execute("handoff_complete", {**base, "completion": {"outcome": "succeeded", "summary": "Done",
+        "acceptance_results": [{"criterion": "tests PASS", "result": "pass", "evidence": "pytest"},
+                               {"index": 1, "result": "pass", "evidence": "README"}]}})
+    assert done["ok"], done
+    stored = store.execute("handoff_get", {"id": handoff["id"]})["data"]["completion"]["acceptance_results"]
+    assert [(r["index"], r["criterion"]) for r in stored] == [(0, "Tests pass"), (1, "Docs   updated")]
+
+
+def test_lenient_inputs_and_helpful_errors(store, record):
+    record["context"]["next_steps"][0]["id"] = "read and restate"
+    upper = store.execute("handoff_push", {"operation_id": str(uuid.uuid4()).upper(), "record": record})
+    assert upper["ok"], upper
+    handoff_id = upper["data"]["id"]
+    assert store.execute("handoff_get", {"id": handoff_id.upper()})["ok"]
+    assert store.execute("handoff_get", {"id": handoff_id})["data"]["record"]["context"]["next_steps"][0]["id"] == "read-and-restate"
+    assert store.execute("handoff_push", {"operation_id": str(uuid.uuid1()), "record": record})["ok"]
+    assert store.execute("handoff_push", {"record": record})["ok"]
+    assert len(store.execute("handoff_list", {"limit": "2"})["data"]["items"]) == 2
+    record["source"]["captured_at"] = "2026-10-06T12:00:00+02:00"
+    error = store.execute("handoff_push", {"record": record})["error"]
+    assert "record.source" in error["message"] and "UTC" in error["message"]
+    assert "must be a UUID" in store.execute("handoff_get", {"id": "nope"})["error"]["message"]
+
+
+def test_clock_moving_backward_keeps_times_monotonic(store, push):
+    clock = [2_000_000_000.0]
+    store.clock = lambda: clock[0]
+    handoff = push()
+    clock[0] -= 3600
+    claimed = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex"})
+    assert claimed["ok"], claimed
+    assert claimed["data"]["receipt_at"] >= handoff["receipt_at"]
+
+
+def test_claim_tokens_are_not_stored_in_plain_text(store, push):
+    handoff = push()
+    token = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
+    # The acquire receipt keeps the token only so a lost response can be retried.
+    assert store.db.execute("SELECT count(*) FROM handoffs WHERE token=?", (token,)).fetchone()[0] == 0
+    store.execute("handoff_claim", {"id": handoff["id"], "action": "release", "claim_token": token})
+    assert token not in "\n".join(store.db.iterdump())
+
+
+def test_receipts_expire_and_retention_purges_completed(tmp_path, record):
+    clock = [2_000_000_000.0]
+    store = Store(tmp_path, clock=lambda: clock[0], retention_days=30)
+    try:
+        args = {"operation_id": str(uuid.uuid4()), "record": record}
+        first = store.execute("handoff_push", args)["data"]
+        token = store.execute("handoff_claim", {"id": first["id"], "holder_label": "codex"})["data"]["claim_token"]
+        store.execute("handoff_complete", {"id": first["id"], "claim_token": token, "completion": {"outcome": "abandoned", "summary": "No longer needed"}})
+        clock[0] += 8 * 86400
+        retried = store.execute("handoff_push", args)
+        assert not retried["replayed"] and retried["data"]["id"] != first["id"]
+        assert store.execute("handoff_get", {"id": first["id"]})["ok"]
+        clock[0] += 31 * 86400
+        store.execute("handoff_push", {"record": record})
+        assert store.execute("handoff_get", {"id": first["id"]})["error"]["code"] == "NOT_FOUND"
+        assert store.db.execute("SELECT count(*) FROM events WHERE handoff_id=?", (first["id"],)).fetchone()[0] == 0
+    finally:
+        store.close()
+
+
+def test_delete(store, push):
+    handoff = push()
+    token = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
+    assert store.execute("handoff_delete", {"id": handoff["id"]})["error"]["code"] == "ALREADY_CLAIMED"
+    store.execute("handoff_claim", {"id": handoff["id"], "action": "release", "claim_token": token})
+    assert store.execute("handoff_delete", {"id": handoff["id"]})["data"] == {"id": handoff["id"], "deleted": True}
+    assert store.execute("handoff_get", {"id": handoff["id"]})["error"]["code"] == "NOT_FOUND"
+    assert store.overview()["total"] == 0
+
+
+def test_migrates_v1_store(tmp_path, record):
+    store = Store(tmp_path)
+    handoff = store.execute("handoff_push", {"record": record})["data"]
+    token = store.execute("handoff_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
+    # Rewrite the store into its v1 shape: plaintext token, no receipt timestamps.
+    store.db.executescript(f"""
+        UPDATE handoffs SET token='{token}';
+        DROP INDEX receipt_age; ALTER TABLE receipts DROP COLUMN at;
+        UPDATE meta SET value='1' WHERE key='schema';""")
+    store.close()
+    store = Store(tmp_path)
+    try:
+        assert store.db.execute("SELECT value FROM meta WHERE key='schema'").fetchone()[0] == "2"
+        assert store.db.execute("SELECT token FROM handoffs").fetchone()[0] != token
+        assert store.execute("handoff_claim", {"id": handoff["id"], "action": "renew", "claim_token": token})["ok"]
+    finally:
+        store.close()
+
+
+def test_resume_claims_and_returns_record(store, push, record):
+    handoff = push()
+    op = str(uuid.uuid4())
+    resumed = store.execute("handoff_resume", {"operation_id": op, "id": handoff["id"], "holder_label": "codex"})
+    assert resumed["ok"], resumed
+    data = resumed["data"]
+    assert data["record"]["context"]["objective"] == record["context"]["objective"]
+    assert data["effective_status"] == "claimed" and data["claim"]["holder_label"] == "codex" and data["claim_token"]
+    replay = store.execute("handoff_resume", {"operation_id": op, "id": handoff["id"], "holder_label": "codex"})
+    assert replay["replayed"] and replay["data"]["claim_token"] == data["claim_token"]
+    other = store.execute("handoff_resume", {"id": handoff["id"], "holder_label": "claude-code"})
+    assert other["error"]["code"] == "ALREADY_CLAIMED"
+    done = store.execute("handoff_complete", {"id": handoff["id"], "claim_token": data["claim_token"],
+                                              "completion": {"outcome": "blocked", "summary": "Waiting on review"}})
+    assert done["ok"], done
+    assert store.execute("handoff_resume", {"id": handoff["id"], "holder_label": "codex"})["error"]["code"] == "ALREADY_COMPLETED"
+    assert len(store.db.execute("SELECT result FROM receipts WHERE tool='handoff_resume'").fetchone()[0]) < 2000

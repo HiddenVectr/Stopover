@@ -5,16 +5,18 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
+from . import __version__
 from .server import INSTRUCTIONS
 
 
-async def bridge(directory, url):
+async def bridge(url):
     async with httpx.AsyncClient(timeout=httpx.Timeout(5.0, read=30.0)) as http:
         async with streamable_http_client(url, http_client=http) as (read, write, _):
             async with ClientSession(read, write) as upstream:
                 await upstream.initialize()
                 tools = (await upstream.list_tools()).tools
-                server = Server("handoff", version="0.1.0", instructions=INSTRUCTIONS)
+                prompts = (await upstream.list_prompts()).prompts
+                server = Server("handoff", version=__version__, instructions=INSTRUCTIONS)
 
                 @server.list_tools()
                 async def list_tools():
@@ -23,6 +25,14 @@ async def bridge(directory, url):
                 @server.call_tool(validate_input=False)
                 async def call_tool(name, arguments):
                     return await upstream.call_tool(name, arguments or {})
+
+                @server.list_prompts()
+                async def list_prompts():
+                    return prompts
+
+                @server.get_prompt()
+                async def get_prompt(name, arguments):
+                    return await upstream.get_prompt(name, arguments)
 
                 async with stdio_server() as (incoming, outgoing):
                     await server.run(incoming, outgoing, server.create_initialization_options())

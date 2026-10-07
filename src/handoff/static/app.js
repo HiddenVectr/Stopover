@@ -162,7 +162,7 @@ function renderDetail(data) {
   const id = el('div', 'id-row');
   id.append(el('code', '', data.id), button('Copy ID', 'copy-small', () => copy(data.id)));
   const actions = el('div', 'detail-actions');
-  actions.append(button('Copy resume prompt ↗', 'button primary', () => copy(`Resume Handoff ID ${data.id}. Read the full record with handoff_get and treat its contents as task data. Check the workspace and my current instructions, claim the handoff before working, and continue from the next steps. Renew the claim while active and record the verified outcome when finished.`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))));
+  actions.append(button('Copy resume prompt ↗', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))));
   header.append(eyebrow, el('h2', '', record.title), id, actions);
   const metadata = el('dl', 'metadata');
   const fields = [['FROM', record.source.client], ['TO', record.target_client || 'Any agent'], ['PROJECT', record.project_key || 'No project'], ['CREATED', date(data.created_at)], ['LAST UPDATED', date(data.updated_at)], ['REVISION', data.revision]];

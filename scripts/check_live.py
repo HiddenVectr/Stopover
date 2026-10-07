@@ -39,7 +39,7 @@ async def check(verify_id=None):
                 async with stdio_client(params) as (incoming, outgoing):
                     async with ClientSession(incoming, outgoing) as receiver:
                         await receiver.initialize()
-                        assert len((await receiver.list_tools()).tools) == 5
+                        assert len((await receiver.list_tools()).tools) == 7
                         fetched = await receiver.call_tool("handoff_get", {"id": handoff_id})
                         assert fetched.structuredContent["data"]["record"]["context"] == Record.model_validate(record).model_dump(mode="json")["context"]
                         claimed = await receiver.call_tool("handoff_claim", {"operation_id": str(uuid.uuid4()), "id": handoff_id, "expected_revision": 1, "holder_label": "fresh-stdio-test-client"})

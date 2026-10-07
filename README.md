@@ -192,7 +192,7 @@ Add a server named `handoff`, select **Streamable HTTP**, enter `http://127.0.0.
 
 ### Verify a connection
 
-The client should discover all five tools: `handoff_push`, `handoff_list`, `handoff_get`, `handoff_claim`, and `handoff_complete`. Some clients prefix tool names with the server name.
+The client should discover all seven tools: `handoff_push`, `handoff_list`, `handoff_get`, `handoff_claim`, `handoff_resume`, `handoff_complete`, and `handoff_delete`, plus three prompts: `save`, `resume`, and `inbox`. Some clients prefix tool names with the server name.
 
 Ask the agent:
 
@@ -225,7 +225,19 @@ Later, in a fresh session of any connected harness, paste the returned prompt:
 
 > Resume Handoff `<id>`.
 
-The recipient reads the saved context, checks your current instructions and any relevant workspace, then claims the handoff before continuing work. It should renew its claim while working and record completion only with observed results.
+The recipient calls `handoff_resume`, which claims the handoff and returns its saved context in one step, then checks your current instructions and any relevant workspace before continuing work. It records completion only with observed results.
+
+### Prompts
+
+Clients that support MCP prompts show Handoff's prompts as commands. In Claude Code they appear as slash commands:
+
+| Command | What it does |
+| --- | --- |
+| `/mcp__handoff__save [target] [focus]` | Saves the conversation; optionally names a receiving harness and what to emphasise. |
+| `/mcp__handoff__resume <id>` | Claims the handoff and continues it. If it is already claimed or completed, the agent reads and summarises it instead. |
+| `/mcp__handoff__inbox` | Lists handoffs that are ready to resume and asks which one to pick. |
+
+Other clients name prompts differently; the plain-language requests above work everywhere.
 
 The receiving agent needs its own access to the project files and tools required for the task. Handoff transfers the saved context, not the workspace.
 
@@ -246,16 +258,18 @@ Running that command twice reuses the same saved example. The app never seeds fa
 | `handoff_push` | Validate and save immutable source context. Return an ID and receipt. |
 | `handoff_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
 | `handoff_get` | Return every record field and the current lifecycle state, without changing anything. |
-| `handoff_claim` | Acquire, renew or release a lease, with revision checks. |
-| `handoff_complete` | Record success, blocked work or abandonment, using active claim credentials. |
+| `handoff_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
+| `handoff_claim` | Acquire, renew or release a lease. Acquire returns a claim token; renew and release need only the ID and token. |
+| `handoff_complete` | Record success, blocked work or abandonment, using the claim token. |
+| `handoff_delete` | Permanently delete a handoff and its history (refused while another agent holds an active claim). Agents are told to use it only on explicit request. |
 
-Every mutation requires a UUIDv4 `operation_id`. After uncertain delivery, retry the **identical request and operation ID**. Changing its arguments returns `IDEMPOTENCY_CONFLICT`. The `replayed` flag means the receipt is historical: fetch current state before relying on an old claim.
+Mutations accept an optional `operation_id` (any UUID, any case). Supply one to make retries safe: after uncertain delivery, retry the **identical request and operation ID**. Changing its arguments returns `IDEMPOTENCY_CONFLICT`. Without an operation ID, a retry creates a second record or action. The `replayed` flag means the receipt is historical: fetch current state before relying on an old claim. Receipts are kept for 7 days; a retry after that is treated as a new request.
 
-Claims default to 15 minutes (60–3,600 seconds allowed). Renew roughly every five minutes with a new operation ID, the current revision, claim token and generation. An expired claim is available again. A stale token cannot modify a newly claimed handoff. A claim coordinates ownership; it does not make external file edits exactly once.
+Claims default to 1 hour (60–86,400 seconds allowed). An expired claim shows as available, but its holder can still renew, release or complete it until another agent acquires the handoff; the new claim's token fences out the old one. Renewal is therefore only needed to stop someone else taking over during long work. `expected_revision` and `claim_generation` are optional extra checks. A claim coordinates ownership; it does not make external file edits exactly once.
 
 The minimum record requires `title`, `source.client`, and `context` with `objective`, `current_state`, at least one `next_steps` entry (`id`, `action`, `done_when`), and at least one `acceptance_criteria` string. Optional fields have stable defaults. [examples/push.json](examples/push.json) is a complete importable request. The MCP schemas expose all fields and limits.
 
-For `outcome="succeeded"`, completion must report one passing result with nonempty evidence for each original acceptance criterion. Use `blocked` or `abandoned` for an unfinished attempt, or release the claim to leave it available. Corrections/continuations use a new push with `parent_id`; source records are never silently rewritten.
+For `outcome="succeeded"`, completion must report one passing result with nonempty evidence for each original acceptance criterion. Identify each criterion by `index` (0-based, in the record's order) or by its text; text matching ignores case and whitespace. A mismatch error lists the original criteria with their indexes. Use `blocked` or `abandoned` for an unfinished attempt, or release the claim to leave it available. Corrections/continuations use a new push with `parent_id`; source records are never silently rewritten.
 
 ## Import and export
 
@@ -275,7 +289,9 @@ An archival envelope is not a valid push request. To import its source into anot
 
 The `handoff_handoff_data` local Docker volume contains SQLite. Container replacement preserves the saved handoffs; there is exactly one database owner. Stop with `docker compose stop`, restart with `docker compose up -d`. **Do not use `docker compose down -v` if you want to keep handoffs.**
 
-For a backup, stop the service cleanly, copy the whole volume (including SQLite sidecars) to protected local storage, and restart. Restore into a separate volume while stopped and verify SQLite integrity before using it. Backups include task context and active claim credentials. An old access-token file may remain from earlier versions; this version does not read or create it. Individual deletion, automatic retention and encrypted database storage are not part of this MVP.
+For a backup, stop the service cleanly, copy the whole volume (including SQLite sidecars) to protected local storage, and restart. Restore into a separate volume while stopped and verify SQLite integrity before using it. Backups include task context. Claim tokens are stored as SHA-256 hashes; the raw token stays in its acquire receipt only while that claim is active, so a lost response can still be retried. An old access-token file may remain from earlier versions; this version does not read or create it. Encrypted database storage is not part of this MVP.
+
+Delete individual handoffs with `handoff_delete`. To delete completed handoffs automatically, set `HANDOFF_RETENTION_DAYS` (for example `90`) in the Compose service's `environment`; completed records older than that are removed, with their history, during later writes. Upgrading from 0.1.x migrates the database in place on first start (schema 2); back up the volume first, because 0.1.x cannot open the migrated store.
 
 The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Handoff contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs through MCP. Handoff requires no authentication and does not validate Host or Origin headers. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
 

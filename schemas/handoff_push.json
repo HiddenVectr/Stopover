@@ -27,7 +27,6 @@
         },
         "evidence_ids": {
           "items": {
-            "pattern": "^[A-Za-z0-9._-]{1,80}$",
             "type": "string"
           },
           "maxItems": 20,
@@ -212,7 +211,6 @@
         },
         "evidence_ids": {
           "items": {
-            "pattern": "^[A-Za-z0-9._-]{1,80}$",
             "type": "string"
           },
           "maxItems": 20,
@@ -248,7 +246,6 @@
         },
         "evidence_ids": {
           "items": {
-            "pattern": "^[A-Za-z0-9._-]{1,80}$",
             "type": "string"
           },
           "maxItems": 20,
@@ -286,7 +283,6 @@
         "project_key": {
           "anyOf": [
             {
-              "pattern": "^[A-Za-z0-9._-]{1,80}$",
               "type": "string"
             },
             {
@@ -299,7 +295,7 @@
         "parent_id": {
           "anyOf": [
             {
-              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "format": "uuid",
               "type": "string"
             },
             {
@@ -350,7 +346,6 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "pattern": "^[A-Za-z0-9._-]{1,80}$",
           "title": "Id",
           "type": "string"
         },
@@ -513,7 +508,6 @@
       "additionalProperties": false,
       "properties": {
         "id": {
-          "pattern": "^[A-Za-z0-9._-]{1,80}$",
           "title": "Id",
           "type": "string"
         },
@@ -542,16 +536,23 @@
   "additionalProperties": false,
   "properties": {
     "operation_id": {
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-      "title": "Operation Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
     },
     "record": {
       "$ref": "#/$defs/Record"
     }
   },
   "required": [
-    "operation_id",
     "record"
   ],
   "title": "Push",

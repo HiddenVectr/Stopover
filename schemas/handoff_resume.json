@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Operation Id"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "holder_label": {
+      "maxLength": 160,
+      "minLength": 1,
+      "title": "Holder Label",
+      "type": "string"
+    },
+    "lease_seconds": {
+      "anyOf": [
+        {
+          "maximum": 86400,
+          "minimum": 60,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lease Seconds"
+    },
+    "expected_revision": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Revision"
+    }
+  },
+  "required": [
+    "id",
+    "holder_label"
+  ],
+  "title": "Resume",
+  "type": "object"
+}
