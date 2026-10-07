@@ -1,0 +1,48 @@
+{
+  "$defs": {
+    "MemoryForgetItem": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "expected_revision"
+      ],
+      "title": "MemoryForgetItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "format": "uuid",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "memories": {
+      "items": {
+        "$ref": "#/$defs/MemoryForgetItem"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Memories",
+      "type": "array"
+    }
+  },
+  "required": [
+    "operation_id",
+    "memories"
+  ],
+  "title": "MemoryForget",
+  "type": "object"
+}

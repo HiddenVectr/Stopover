@@ -269,5 +269,69 @@ class Delete(Model):
     id: UUID
 
 
+MemoryKey = Annotated[str, StringConstraints(strip_whitespace=True, to_lower=True,
+    pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$")]
+MemoryCategory = Literal["fact", "preference", "habit", "goal", "project_context"]
+MemoryText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
+Revision = Annotated[int, Field(ge=0, strict=True)]
+
+
+class MemoryEntry(Model):
+    key: MemoryKey = Field(description="Stable topic key, e.g. communication.response_length. Reuse the existing key when correcting a memory.")
+    expected_revision: Revision = Field(description="0 for a new key; otherwise the revision returned by handoff_memory_read. Deleted keys cannot be recreated.")
+    content: MemoryText
+    category: MemoryCategory = "fact"
+    basis: Literal["stated", "observed", "inferred"] = "stated"
+    source: Source = Field(description="Original evidence source, preserved across harness imports; do not relabel imported knowledge as a new observation.")
+    evidence: Annotated[str, StringConstraints(max_length=2048)] = ""
+
+
+class MemoryUpdate(Model):
+    operation_id: UUID
+    client: Short = Field(description="Harness making this update, e.g. codex or claude-code.")
+    memories: list[MemoryEntry] = Field(min_length=1, max_length=50)
+    coverage: Coverage = Field(default_factory=Coverage)
+
+    @model_validator(mode="after")
+    def unique_bounded(self):
+        if len({m.key for m in self.memories}) != len(self.memories):
+            raise ValueError("Memory keys must be unique within a batch")
+        bounded_json(self.model_dump(mode="json"), 49152)
+        return self
+
+
+class MemoryRead(Model):
+    key: MemoryKey | None = None
+    category: MemoryCategory | None = None
+    q: Annotated[str, StringConstraints(max_length=200)] = ""
+    since_revision: Revision | None = Field(default=None, description="Return changes after this store revision, including deletion markers. Advance only after reading all pages.")
+    include_deleted: bool = False
+    limit: Annotated[int, Field(ge=1, le=50)] = 20
+    cursor: Annotated[str, StringConstraints(max_length=2048)] | None = None
+
+
+class MemoryForgetItem(Model):
+    key: MemoryKey
+    expected_revision: Annotated[int, Field(ge=1, strict=True)]
+
+
+class MemoryForget(Model):
+    operation_id: UUID
+    memories: list[MemoryForgetItem] = Field(min_length=1, max_length=50)
+
+    @model_validator(mode="after")
+    def unique_keys(self):
+        if len({m.key for m in self.memories}) != len(self.memories):
+            raise ValueError("Memory keys must be unique within a batch")
+        return self
+
+
+class MemoryExport(MemoryRead):
+    format: Literal["json", "markdown"] = "json"
+
+
 INPUTS = {"handoff_push": Push, "handoff_list": ListQuery, "handoff_get": Get,
           "handoff_claim": Claim, "handoff_resume": Resume, "handoff_complete": Complete, "handoff_delete": Delete}
+
+INPUTS.update({"handoff_memory_read": MemoryRead, "handoff_memory_update": MemoryUpdate,
+               "handoff_memory_forget": MemoryForget, "handoff_memory_export": MemoryExport})

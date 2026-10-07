@@ -69,3 +69,64 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         assert not any(cookie["name"] == "handoff_session" for cookie in context.cookies())
         assert not errors, errors
         browser.close()
+
+
+def test_personal_memories_browse_search_refresh_and_mobile(live_server):
+    from test_memory import entry, update, forget
+    url = live_server['url']
+    payload = '<img src=x onerror="window.memoryInjected=true">'
+    args = update(*(entry(f'personal.topic{i:02}', payload if i == 0 else f'Personal memory number {i}') for i in range(25)))
+    asyncio.run(call_remote(url + '/mcp', 'handoff_memory_update', args))
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        context = browser.new_context(viewport={'width': 1440, 'height': 1000}, permissions=['clipboard-read', 'clipboard-write'])
+        page = context.new_page()
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto(url)
+        page.get_by_role('button', name='Personal memories').click()
+        expect(page.get_by_role('heading', name='Personal memories', exact=True)).to_be_visible()
+        expect(page.locator('#memory-total')).to_have_text('25')
+        expect(page.locator('.memory-row')).to_have_count(20)
+        page.get_by_role('button', name='Load more memories').click()
+        expect(page.locator('.memory-row')).to_have_count(25)
+        page.locator('.memory-row').filter(has_text='personal.topic00').click()
+        expect(page.locator('#memory-detail')).to_contain_text(payload)
+        assert not page.evaluate('Boolean(window.memoryInjected)')
+        page.get_by_role('button', name='Copy memory', exact=True).click()
+        assert page.evaluate('navigator.clipboard.readText()') == payload
+        page.get_by_label('Search personal memories').fill('number 24')
+        expect(page.locator('.memory-row')).to_have_count(1)
+        page.get_by_label('Search personal memories').fill('does-not-exist')
+        expect(page.get_by_text('No matching memories.')).to_be_visible()
+        page.get_by_label('Search personal memories').fill('')
+        page.get_by_label('Filter memories by category').select_option('habit')
+        expect(page.get_by_text('No matching memories.')).to_be_visible()
+        page.get_by_label('Filter memories by category').select_option('preference')
+        expect(page.locator('.memory-row')).to_have_count(20)
+        page.goto(url + '/memories/personal.topic00')
+        expect(page.locator('#memory-detail h2')).to_have_text('personal.topic00')
+        corrected = update(entry('personal.topic00', 'A corrected personal preference.', revision=1), client='claude-code')
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(lambda: asyncio.run(call_remote(url + '/mcp', 'handoff_memory_update', corrected))).result()
+        page.locator('#memory-refresh').click()
+        expect(page.locator('#memory-detail')).to_contain_text('A corrected personal preference.')
+        expect(page.locator('#memory-detail')).to_contain_text('claude-code')
+        page.set_viewport_size({'width': 390, 'height': 844})
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.screenshot(path='/tmp/handoff-memory-mobile.png', full_page=True)
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.screenshot(path='/tmp/handoff-memory-desktop.png', full_page=True)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(lambda: asyncio.run(call_remote(url + '/mcp', 'handoff_memory_forget', forget('personal.topic00', 26)))).result()
+        page.locator('#memory-refresh').click()
+        expect(page.locator('#memory-detail')).to_contain_text('FORGOTTEN MEMORY')
+        expect(page.locator('#memory-detail')).not_to_contain_text('A corrected personal preference.')
+        expect(page.locator('#memory-total')).to_have_text('24')
+        page.locator('[data-status="all"]').click()
+        expect(page.get_by_role('heading', name='All handoffs', exact=True)).to_be_visible()
+        page.go_back()
+        expect(page.get_by_role('heading', name='Personal memories', exact=True)).to_be_visible()
+        assert not errors, errors
+        browser.close()

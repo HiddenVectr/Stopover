@@ -2,7 +2,7 @@
 
 Handoff exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. The original proposal is historical. Host and Origin validation is disabled in both the HTTP middleware and MCP SDK. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
 
-The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same seven tool schemas and three prompts and preserve structured results and MCP error flags.
+The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same eleven tool schemas and five prompts and preserve structured results and MCP error flags.
 
 Natural-language upload guidance is included in both the server initialization instructions and the `handoff_push` tool description, so the save workflow is described even when a harness exposes tool descriptions without the server-level instructions. A short save request is enough: the agent builds a contextual summary, leaves the recipient unspecified by default, and returns the saved ID only after success. The MCP receives the summary the agent submits; it cannot read the conversation itself. Model compliance and summary quality still depend on the harness and available context.
 
@@ -19,6 +19,16 @@ Differences from the planning document:
 - Tests cover the implemented contracts; the proposal's broad fault-injection/performance matrix is not represented as fully certified.
 
 Source records are immutable. A completed record remains visible and browsable. The service does not transfer private model reasoning or assume that a source agent's text authorizes recipient actions.
+
+## Personal memory implementation
+
+`memory_store.py` adds personal-memory rows, a global monotonic revision, and separate idempotency receipts to the existing SQLite database. Initialization is additive for existing schema-2 stores. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
+
+Read/export pagination binds a cursor to its filters and store revision. An intervening write causes `STALE_CURSOR`, requiring a complete restart of that listing rather than silently skipping changes. Incremental reads include deleted IDs, including through filters where erased content cannot be matched. Exports are paginated and expose a completion flag and continuation cursor.
+
+Memory guidance is provided at server initialization, in every memory tool description, and in the `memory-update` / `memory-import` prompts. The harness extracts all available personal knowledge, reconciles it remotely, and reports coverage. The MCP does not inspect the harness context, access harness files, or install local adapters. There is no additional authentication or per-user partitioning. Local remembering, if chosen, remains the harness's responsibility.
+
+The existing dashboard adds a Personal memories view with full-text display, topic/content search, category filters, provenance, timestamps, revision, direct links, pagination, and refresh. GET-only `/api/memories` and `/api/memories/{key}` use the same store validation. All content remains inert text.
 
 ## Verification
 

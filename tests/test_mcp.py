@@ -17,7 +17,7 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
             async with ClientSession(read, write) as source:
                 await source.initialize()
                 tools = (await source.list_tools()).tools
-                assert {tool.name for tool in tools} == {"handoff_push", "handoff_list", "handoff_get", "handoff_claim", "handoff_resume", "handoff_complete", "handoff_delete"}
+                assert {tool.name for tool in tools} == {"handoff_push", "handoff_list", "handoff_get", "handoff_claim", "handoff_resume", "handoff_complete", "handoff_delete", "handoff_memory_read", "handoff_memory_update", "handoff_memory_forget", "handoff_memory_export"}
                 args = {"operation_id": str(uuid.uuid4()), "record": record}
                 pushed = await source.call_tool("handoff_push", args)
                 assert not pushed.isError, pushed
@@ -28,8 +28,8 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
                 async with stdio_client(params) as (incoming, outgoing):
                     async with ClientSession(incoming, outgoing) as recipient:
                         await recipient.initialize()
-                        assert len((await recipient.list_tools()).tools) == 7
-                        assert {p.name for p in (await recipient.list_prompts()).prompts} == {"save", "resume", "inbox"}
+                        assert len((await recipient.list_tools()).tools) == 11
+                        assert {p.name for p in (await recipient.list_prompts()).prompts} == {"save", "resume", "inbox", "memory-update", "memory-import"}
                         prompt = await recipient.get_prompt("resume", {"id": handoff_id})
                         assert "handoff_resume" in prompt.messages[0].content.text and handoff_id in prompt.messages[0].content.text
                         fetched = await recipient.call_tool("handoff_get", {"id": handoff_id})
@@ -73,7 +73,7 @@ async def test_remote_mcp_headers_support_upload_and_read(live_server, record, h
         async with streamable_http_client(live_server["url"] + "/mcp", http_client=http) as (read, write, _):
             async with ClientSession(read, write) as client:
                 await client.initialize()
-                assert len((await client.list_tools()).tools) == 7
+                assert len((await client.list_tools()).tools) == 11
                 pushed = await client.call_tool("handoff_push", {"operation_id": str(uuid.uuid4()), "record": record})
                 assert not pushed.isError, pushed
                 handoff_id = pushed.structuredContent["data"]["id"]

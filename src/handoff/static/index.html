@@ -12,15 +12,17 @@
       <a href="/" class="brand"><span class="brand-icon" aria-hidden="true">⇄</span>Handoff</a>
       <div class="workspace"><span class="workspace-avatar">L</span><div><strong>Local workspace</strong><span>One machine. All your agents.</span></div></div>
       <p class="nav-label">INBOX</p>
-      <nav aria-label="Handoff status">
+      <nav aria-label="Handoff navigation">
         <button class="nav-item active" data-status="all"><span>All handoffs</span><span class="count" id="count-all">0</span></button>
         <button class="nav-item" data-status="available"><span><i class="dot available"></i>Ready to resume</span><span class="count" id="count-available">0</span></button>
         <button class="nav-item" data-status="claimed"><span><i class="dot claimed"></i>In progress</span><span class="count" id="count-claimed">0</span></button>
         <button class="nav-item" data-status="completed"><span><i class="dot completed"></i>Completed</span><span class="count" id="count-completed">0</span></button>
+        <button id="memories-button" class="nav-item"><span>Personal memories</span><span class="count" id="count-memories">0</span></button>
       </nav>
       <div class="sidebar-bottom"><div class="local-status"><i class="dot available"></i><span>Self-hosted inbox</span></div><button id="setup-button" class="subtle-button">Connect your agents <span>↗</span></button></div>
     </aside>
     <main class="main">
+      <div id="handoff-view">
       <header class="page-header"><div><p class="eyebrow">CONTEXT THAT CARRIES FORWARD</p><h1 id="page-title">All handoffs</h1><p class="muted">Pick up where your last agent left off.</p></div><button id="refresh-button" class="button secondary">↻ <span>Refresh</span></button></header>
       <div class="summary-bar"><span><strong id="summary-total">0</strong> handoffs in your workspace</span><span id="sync-state" class="small muted" role="status">Connecting…</span></div>
       <div class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search by title, project, or ID" aria-label="Search handoffs"></label><select id="project-filter" aria-label="Filter by project"><option value="">All projects</option></select><select id="target-filter" aria-label="Filter by receiving agent"><option value="">All receiving agents</option></select></div>
@@ -29,9 +31,20 @@
         <section class="list-panel" aria-label="Handoffs"><div class="list-heading"><span id="list-label">HANDOFFS</span><span class="small muted">Newest first</span></div><div id="handoff-list" aria-live="polite"></div><button id="load-more" class="button secondary load-more" hidden>Load more handoffs</button></section>
         <section id="detail" class="detail-panel" aria-label="Handoff details"><div class="empty-detail"><span class="empty-icon" aria-hidden="true">⇄</span><h2>A clear place to continue.</h2><p>Select a handoff to explore its context,<br>decisions, and next steps.</p><span class="small muted">Any compatible MCP harness</span></div></section>
       </div>
+      </div>
+      <div id="memory-view" hidden>
+        <header class="page-header"><div><p class="eyebrow">PERSONAL CONTEXT THAT TRAVELS WITH YOU</p><h1>Personal memories</h1><p class="muted">What your agents know about you, shared across harnesses.</p></div><button id="memory-refresh" class="button secondary">↻ <span>Refresh</span></button></header>
+        <div class="summary-bar"><span><strong id="memory-total">0</strong> personal memories</span><span id="memory-sync" class="small muted" role="status">Connecting…</span></div>
+        <div class="filters"><label class="search-field"><span aria-hidden="true">⌕</span><input id="memory-search" type="search" placeholder="Search personal memories" aria-label="Search personal memories"></label><select id="memory-category" aria-label="Filter memories by category"><option value="">All categories</option><option value="fact">Facts</option><option value="preference">Preferences</option><option value="habit">Habits</option><option value="goal">Goals</option><option value="project_context">Project context</option></select></div>
+        <p id="memory-error" class="error" role="alert" hidden></p>
+        <div class="inbox-layout">
+          <section class="list-panel" aria-label="Personal memories"><div class="list-heading"><span>MEMORIES</span><span class="small muted">By topic</span></div><div id="memory-list" aria-live="polite"></div><button id="memory-more" class="button secondary load-more" hidden>Load more memories</button></section>
+          <section id="memory-detail" class="detail-panel" aria-label="Personal memory details"><div class="empty-detail"><span class="empty-icon" aria-hidden="true">◎</span><h2>Personal context, in one place.</h2><p>Select a memory to see its source and latest update.</p><span class="small muted">Ask your harness to “update my Handoff memory”.</span></div></section>
+        </div>
+      </div>
     </main>
   </div>
-  <dialog id="setup-dialog"><div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div><p class="muted">Add this Streamable HTTP MCP server to your harness. No token or login is needed.</p><h3>MCP URL</h3><pre id="mcp-url"></pre><button id="copy-mcp-url" class="button secondary" type="button">Copy MCP URL</button><h3>Codex</h3><pre id="codex-add"></pre><h3>Claude Code</h3><pre id="claude-add"></pre><p class="small muted">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None. Open a fresh agent session, then ask it to upload a handoff.</p></dialog>
+  <dialog id="setup-dialog"><div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div><p class="muted">Add this Streamable HTTP MCP server to your harness. No token or login is needed.</p><h3>MCP URL</h3><pre id="mcp-url"></pre><button id="copy-mcp-url" class="button secondary" type="button">Copy MCP URL</button><h3>Codex</h3><pre id="codex-add"></pre><h3>Claude Code</h3><pre id="claude-add"></pre><p class="small muted">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None. Open a fresh agent session, then ask it to upload a handoff or “update my Handoff memory”. To retrieve personal memories in another harness, say “import my Handoff memory”.</p></dialog>
   <dialog id="copy-dialog"><div class="dialog-heading"><h2>Copy this text</h2><button id="close-copy" class="icon-button" aria-label="Close copy text">×</button></div><p class="muted">Your browser couldn’t use the clipboard. The text is selected below; press Ctrl+C or ⌘C to copy it.</p><textarea id="copy-text" class="copy-text" aria-label="Text to copy" readonly></textarea></dialog>
   <div id="toast" role="status" class="toast" hidden></div>
 </body>

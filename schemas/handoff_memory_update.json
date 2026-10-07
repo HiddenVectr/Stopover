@@ -1,0 +1,198 @@
+{
+  "$defs": {
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "default": "Summary of context available to the source agent.",
+          "title": "Basis",
+          "type": "string"
+        },
+        "omitted": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Omitted",
+          "type": "array"
+        }
+      },
+      "title": "Coverage",
+      "type": "object"
+    },
+    "MemoryEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "Stable topic key, e.g. communication.response_length. Reuse the existing key when correcting a memory.",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "expected_revision": {
+          "description": "0 for a new key; otherwise the revision returned by handoff_memory_read. Deleted keys cannot be recreated.",
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "content": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "category": {
+          "default": "fact",
+          "enum": [
+            "fact",
+            "preference",
+            "habit",
+            "goal",
+            "project_context"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "basis": {
+          "default": "stated",
+          "enum": [
+            "stated",
+            "observed",
+            "inferred"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source",
+          "description": "Original evidence source, preserved across harness imports; do not relabel imported knowledge as a new observation."
+        },
+        "evidence": {
+          "default": "",
+          "maxLength": 2048,
+          "title": "Evidence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "expected_revision",
+        "content",
+        "source"
+      ],
+      "title": "MemoryEntry",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "client": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Client",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "conversation_ref": {
+          "anyOf": [
+            {
+              "maxLength": 8192,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Ref"
+        },
+        "captured_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Captured At"
+        },
+        "authoring_method": {
+          "default": "agent_summary",
+          "enum": [
+            "agent_summary",
+            "human_summary"
+          ],
+          "title": "Authoring Method",
+          "type": "string"
+        },
+        "transfer_method": {
+          "default": "direct_mcp",
+          "enum": [
+            "direct_mcp",
+            "manual_import",
+            "local_test"
+          ],
+          "title": "Transfer Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client"
+      ],
+      "title": "Source",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "operation_id": {
+      "format": "uuid",
+      "title": "Operation Id",
+      "type": "string"
+    },
+    "client": {
+      "description": "Harness making this update, e.g. codex or claude-code.",
+      "maxLength": 160,
+      "minLength": 1,
+      "title": "Client",
+      "type": "string"
+    },
+    "memories": {
+      "items": {
+        "$ref": "#/$defs/MemoryEntry"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Memories",
+      "type": "array"
+    },
+    "coverage": {
+      "$ref": "#/$defs/Coverage"
+    }
+  },
+  "required": [
+    "operation_id",
+    "client",
+    "memories"
+  ],
+  "title": "MemoryUpdate",
+  "type": "object"
+}

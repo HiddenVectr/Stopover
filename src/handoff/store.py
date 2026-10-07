@@ -117,6 +117,8 @@ class Store:
                 raise RuntimeError("Unsupported database schema; restore a compatible Handoff version")
             self.db.execute("INSERT OR IGNORE INTO meta VALUES ('schema','2')")
             self.db.execute("CREATE INDEX IF NOT EXISTS receipt_age ON receipts(at)")
+            from .memory_store import MemoryStore
+            self.memories = MemoryStore(self.db)
             if self.db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
                 raise RuntimeError("SQLite integrity check failed")
         except Exception:
@@ -158,7 +160,9 @@ class Store:
             request = INPUTS[name].model_validate(arguments).model_dump(mode="json")
             with self.lock:
                 now = self.clock()
-                if name == "handoff_get":
+                if name.startswith("handoff_memory_"):
+                    data, replayed = self.memories.execute(name, request, now)
+                elif name == "handoff_get":
                     data = self._get(request["id"], now)
                     replayed = False
                 elif name == "handoff_list":
@@ -415,6 +419,7 @@ class Store:
             counts = {"available": 0, "claimed": 0, "completed": 0}
             counts.update({row["state"]: row["count"] for row in rows})
             return {"counts": counts, "total": sum(counts.values()),
+                    "memories": self.db.execute("SELECT count(*) FROM personal_memories WHERE deleted=0").fetchone()[0],
                     "projects": [r[0] for r in self.db.execute("SELECT DISTINCT project FROM handoffs WHERE project IS NOT NULL ORDER BY project")],
                     "targets": [r[0] for r in self.db.execute("SELECT DISTINCT target FROM handoffs WHERE target IS NOT NULL ORDER BY target")]}
 

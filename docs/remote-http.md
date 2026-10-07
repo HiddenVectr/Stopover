@@ -72,7 +72,7 @@ Open the dashboard at the same origin, then ask your harness:
 
 > Use Handoff's handoff_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
 
-An empty successful result is valid. Confirm discovery of all seven tools. To save context, say:
+An empty successful result is valid. Confirm discovery of all eleven tools. To save context, say:
 
 > Upload a handoff so I can continue this conversation later.
 

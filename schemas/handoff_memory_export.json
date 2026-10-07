@@ -1,0 +1,93 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "key": {
+      "anyOf": [
+        {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key"
+    },
+    "category": {
+      "anyOf": [
+        {
+          "enum": [
+            "fact",
+            "preference",
+            "habit",
+            "goal",
+            "project_context"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Category"
+    },
+    "q": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Q",
+      "type": "string"
+    },
+    "since_revision": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Return changes after this store revision, including deletion markers. Advance only after reading all pages.",
+      "title": "Since Revision"
+    },
+    "include_deleted": {
+      "default": false,
+      "title": "Include Deleted",
+      "type": "boolean"
+    },
+    "limit": {
+      "default": 20,
+      "maximum": 50,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "cursor": {
+      "anyOf": [
+        {
+          "maxLength": 2048,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cursor"
+    },
+    "format": {
+      "default": "json",
+      "enum": [
+        "json",
+        "markdown"
+      ],
+      "title": "Format",
+      "type": "string"
+    }
+  },
+  "title": "MemoryExport",
+  "type": "object"
+}

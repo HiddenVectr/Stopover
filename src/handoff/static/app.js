@@ -2,7 +2,7 @@
 
 const $ = (id) => document.getElementById(id);
 const labels = { all: 'All handoffs', available: 'Ready to resume', claimed: 'In progress', completed: 'Completed' };
-const state = { status: 'all', selected: location.pathname.split('/')[2] || null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
+const state = { status: 'all', selected: location.pathname.startsWith('/handoffs/') ? location.pathname.split('/')[2] : null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
 let toastTimer, searchTimer;
 
 function el(tag, className, text) {
@@ -66,6 +66,8 @@ function options(id, values, first) {
 
 async function overview() {
   const data = await api('/api/overview');
+  $('count-memories').textContent = data.memories;
+  $('memory-total').textContent = data.memories;
   $('count-all').textContent = data.total;
   $('summary-total').textContent = data.total;
   for (const name of ['available', 'claimed', 'completed']) $('count-' + name).textContent = data.counts[name];
@@ -279,6 +281,8 @@ async function enter() {
 }
 
 for (const item of document.querySelectorAll('[data-status]')) item.addEventListener('click', () => {
+  showMemoryView(false);
+  history.pushState({}, '', state.selected ? '/handoffs/' + encodeURIComponent(state.selected) : '/');
   state.status = item.dataset.status;
   for (const other of document.querySelectorAll('[data-status]')) other.classList.toggle('active', other === item);
   $('page-title').textContent = labels[state.status];
@@ -296,10 +300,160 @@ $('copy-mcp-url').addEventListener('click', () => copy(mcpUrl));
 $('setup-button').addEventListener('click', () => $('setup-dialog').showModal());
 $('close-setup').addEventListener('click', () => $('setup-dialog').close());
 $('close-copy').addEventListener('click', () => $('copy-dialog').close());
-addEventListener('popstate', () => { const id = location.pathname.split('/')[2]; if (id) choose(id, false); else { state.selected = null; state.detail = null; enter().catch((exception) => error(exception.message)); } });
+
+const memories = { active: false, selected: null, items: [], cursor: null, generation: 0, detail: null, pages: 1 };
+let memorySearchTimer;
+
+function memoryError(message = '') {
+  $('memory-error').hidden = !message;
+  $('memory-error').textContent = message;
+  if (message) $('memory-sync').textContent = 'Could not refresh';
+}
+
+function showMemoryView(active) {
+  memories.active = active;
+  $('handoff-view').hidden = active;
+  $('memory-view').hidden = !active;
+  $('memories-button').classList.toggle('active', active);
+  for (const item of document.querySelectorAll('[data-status]')) item.classList.toggle('active', !active && item.dataset.status === state.status);
+}
+
+function renderMemories() {
+  const list = $('memory-list');
+  list.replaceChildren();
+  if (!memories.items.length) {
+    const empty = el('div', 'empty-list');
+    const filtered = $('memory-search').value || $('memory-category').value;
+    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI harness “update my Handoff memory” to save what it knows about you.'));
+    list.append(empty);
+  }
+  for (const item of memories.items) {
+    const row = button('', 'handoff-row memory-row' + (item.key === memories.selected ? ' selected' : ''), () => chooseMemory(item.key));
+    row.setAttribute('aria-pressed', String(item.key === memories.selected));
+    const top = el('div', 'row-top');
+    top.append(el('span', 'badge', item.category.replaceAll('_', ' ')), el('time', '', relative(item.updated_at)));
+    row.append(top, el('div', 'row-title', item.key), el('div', 'row-preview', item.content), el('div', 'row-bottom', `${item.source.client} · ${item.basis}`));
+    list.append(row);
+  }
+  $('memory-more').hidden = !memories.cursor;
+}
+
+async function loadMemories(append = false) {
+  const generation = ++memories.generation;
+  const query = new URLSearchParams({ limit: '20' });
+  if ($('memory-search').value.trim()) query.set('q', $('memory-search').value.trim());
+  if ($('memory-category').value) query.set('category', $('memory-category').value);
+  if (append && memories.cursor) query.set('cursor', memories.cursor);
+  $('memory-more').disabled = true;
+  try {
+    const response = await api('/api/memories?' + query);
+    if (generation !== memories.generation) return;
+    memories.items = append ? [...memories.items, ...response.data.items] : response.data.items;
+    memories.cursor = response.data.next_cursor;
+    memories.pages = append ? memories.pages + 1 : 1;
+    renderMemories();
+    memoryError();
+    $('memory-sync').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch (exception) { if (generation === memories.generation) memoryError(exception.message); }
+  finally { if (generation === memories.generation) $('memory-more').disabled = false; }
+}
+
+function renderMemoryDetail(item) {
+  const panel = $('memory-detail');
+  panel.replaceChildren();
+  const header = el('header', 'detail-header');
+  header.append(el('div', 'eyebrow', item.deleted ? 'FORGOTTEN MEMORY' : 'PERSONAL MEMORY'), el('h2', '', item.key));
+  if (!item.deleted) header.append(button('Copy memory', 'button secondary', () => copy(item.content)));
+  const content = el('div', 'detail-content');
+  if (item.deleted) {
+    textSection(content, 'Forgotten', 'This memory was removed from Handoff. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
+  } else {
+    textSection(content, 'Memory', item.content);
+    textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
+    textSection(content, 'Original source', item.source.client);
+    if (item.source.model) textSection(content, 'Source model', item.source.model);
+    textSection(content, 'Evidence', item.evidence);
+    textSection(content, 'Source conversation', item.source.conversation_ref);
+    if (item.source.captured_at) textSection(content, 'Source captured', date(item.source.captured_at));
+    textSection(content, 'Last updated by', item.updated_by);
+  }
+  textSection(content, 'Last updated', date(item.updated_at));
+  textSection(content, 'Created', date(item.created_at));
+  textSection(content, 'Revision', String(item.revision));
+  textSection(content, 'Memory ID', item.id);
+  content.append(el('p', 'trust-note', 'Ask your harness to correct or forget a memory. Handoff shares personal context; each harness decides whether to remember it locally.'));
+  panel.append(header, content);
+}
+
+async function memoryDetail(key) {
+  try {
+    const response = await api('/api/memories/' + encodeURIComponent(key));
+    if (memories.selected !== key) return;
+    const item = response.data.items[0];
+    if (!item) {
+      memories.detail = null;
+      const empty = el('div', 'empty-detail');
+      empty.append(el('h2', '', 'Memory not found'), el('p', '', 'Choose a memory from the list.'));
+      $('memory-detail').replaceChildren(empty);
+    } else if (!memories.detail || memories.detail.key !== key || memories.detail.revision !== item.revision) {
+      memories.detail = item;
+      renderMemoryDetail(item);
+    }
+  } catch (exception) { if (memories.selected === key) memoryError(exception.message); }
+}
+
+function chooseMemory(key, updateURL = true) {
+  memories.selected = key;
+  memories.detail = null;
+  if (updateURL) history.pushState({}, '', '/memories/' + encodeURIComponent(key));
+  renderMemories();
+  $('memory-detail').replaceChildren(el('div', 'empty-detail', 'Loading memory…'));
+  memoryDetail(key);
+  if (matchMedia('(max-width:620px)').matches) $('memory-detail').scrollIntoView({ behavior: 'instant', block: 'start' });
+}
+
+async function refreshMemories() {
+  $('memory-refresh').disabled = true;
+  try {
+    await overview();
+    await loadMemories();
+    if (memories.selected) await memoryDetail(memories.selected);
+  } catch (exception) { memoryError(exception.message); }
+  finally { $('memory-refresh').disabled = false; }
+}
+
+function route() {
+  const active = location.pathname === '/memories' || location.pathname.startsWith('/memories/');
+  showMemoryView(active);
+  if (active) {
+    memories.selected = location.pathname.split('/')[2] || null;
+    memories.detail = null;
+    $('memory-detail').replaceChildren(el('div', 'empty-detail', memories.selected ? 'Loading memory…' : 'Select a memory to see its source and latest update.'));
+    refreshMemories();
+  } else {
+    state.selected = location.pathname.split('/')[2] || null;
+    state.detail = null;
+    enter().catch((exception) => error(exception.message));
+  }
+}
+
+$('memories-button').addEventListener('click', () => { history.pushState({}, '', '/memories'); route(); });
+$('memory-refresh').addEventListener('click', refreshMemories);
+$('memory-more').addEventListener('click', () => loadMemories(true));
+$('memory-search').addEventListener('input', () => { clearTimeout(memorySearchTimer); memorySearchTimer = setTimeout(() => loadMemories(), 250); });
+$('memory-category').addEventListener('change', () => loadMemories());
+addEventListener('popstate', route);
 setInterval(async () => {
   if (document.hidden || $('setup-dialog').open) return;
+  if (memories.active) {
+    try {
+      await overview();
+      if (memories.pages === 1 && !$('memory-search').matches(':focus')) await loadMemories();
+      if (memories.selected) await memoryDetail(memories.selected);
+    } catch (exception) { memoryError(exception.message); }
+    return;
+  }
   try { await overview(); if (state.pages === 1 && !$('search').matches(':focus')) await loadList(); if (state.selected) await detail(state.selected, true); }
   catch (exception) { error(exception.message); }
 }, 15000);
-enter().catch((exception) => error(exception.message));
+route();
