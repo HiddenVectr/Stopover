@@ -36,7 +36,7 @@ class OwnerLock:
                 fcntl.flock(self.file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             self.file.close()
-            raise RuntimeError("Another Handoff service already owns this data directory") from None
+            raise RuntimeError("Another Baton service already owns this data directory") from None
 
     def close(self):
         self.file.close()
@@ -162,7 +162,7 @@ class SQLiteTransaction(Transaction):
 
     def scrub_claim_tokens(self, handoff_id):
         self.db.execute("UPDATE receipts SET result=json_remove(result,'$.claim_token') "
-                        "WHERE handoff_id=? AND tool IN ('handoff_claim','handoff_resume')", (handoff_id,))
+                        "WHERE handoff_id=? AND tool IN ('baton_claim','baton_resume','handoff_claim','handoff_resume')", (handoff_id,))
 
     # Meta
     def get_meta(self, key):
@@ -215,8 +215,15 @@ class SQLiteBackend(Backend):
         self.lock = threading.RLock()
         self.owner = OwnerLock(self.directory / "owner.lock")
         try:
-            self.db = sqlite3.connect(self.directory / "handoff.sqlite3", isolation_level=None, check_same_thread=False)
-            os.chmod(self.directory / "handoff.sqlite3", 0o600)
+            path = self.directory / "baton.sqlite3"
+            legacy = self.directory / "handoff.sqlite3"
+            if legacy.exists() and not path.exists():
+                # Stores created before the Baton rename keep their data; SQLite sidecars move with the file.
+                for suffix in ("", "-wal", "-shm"):
+                    if Path(f"{legacy}{suffix}").exists():
+                        Path(f"{legacy}{suffix}").rename(f"{path}{suffix}")
+            self.db = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+            os.chmod(path, 0o600)
             self.db.row_factory = sqlite3.Row
             self._create_schema()
             if self.db.execute("PRAGMA quick_check").fetchone()[0] != "ok":
@@ -264,7 +271,7 @@ class SQLiteBackend(Backend):
         if version and version[0] == "1":
             self._migrate_v1()
         elif version and version[0] != "2":
-            raise RuntimeError("Unsupported database schema; restore a compatible Handoff version")
+            raise RuntimeError("Unsupported database schema; restore a compatible Baton version")
         self.db.execute("INSERT OR IGNORE INTO meta VALUES ('schema','2')")
         self.db.execute("CREATE INDEX IF NOT EXISTS receipt_age ON receipts(at)")
         # Personal memories are additive tables on schema 2.
@@ -292,7 +299,7 @@ class SQLiteBackend(Backend):
             self.db.execute("UPDATE receipts SET at=?", (self.clock(),))
             for row in self.db.execute("SELECT id,token FROM handoffs WHERE token IS NOT NULL").fetchall():
                 self.db.execute("UPDATE handoffs SET token=? WHERE id=?", (token_hash(row["token"]), row["id"]))
-            self.db.execute("""UPDATE receipts SET result=json_remove(result,'$.claim_token') WHERE tool='handoff_claim'
+            self.db.execute("""UPDATE receipts SET result=json_remove(result,'$.claim_token') WHERE tool IN ('handoff_claim','baton_claim')
                                AND handoff_id NOT IN (SELECT id FROM handoffs WHERE status='claimed')""")
             self.db.execute("UPDATE meta SET value='2' WHERE key='schema'")
             self.db.execute("COMMIT")

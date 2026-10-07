@@ -1,14 +1,14 @@
-# Handoff
+# Baton
 
 A shared inbox for carrying tasks between **AI harnesses that support MCP**, including Codex, Claude Code, Cursor, Oh My Pi (OMP), and Hermes Agent. One Docker container runs the MCP server and web dashboard, with SQLite stored in a persistent Docker volume.
 
-AI harnesses connect directly to the server URL using **Streamable HTTP**. Connections need no Handoff token or login; remote deployments use Tailscale to control network access. Docker runs on the server; clients do not need Docker, Python, or a process-launch command. Client names are labels, not an allowlist. Handoff stores task context and coordinates ownership; it does not launch agents or copy project files.
+AI harnesses connect directly to the server URL using **Streamable HTTP**. Connections need no Baton token or login; remote deployments use Tailscale to control network access. Docker runs on the server; clients do not need Docker, Python, or a process-launch command. Client names are labels, not an allowlist. Baton stores task context and coordinates ownership; it does not launch agents or copy project files.
 
 ## Start the server
 
 These are server administration steps, not client connection steps.
 
-Requires Docker Engine 28+ (or current Docker Desktop) with Compose. Run the following from the Handoff directory containing `compose.yaml`. Use a local Docker context, not a remote daemon.
+Requires Docker Engine 28+ (or current Docker Desktop) with Compose. Run the following from the Baton directory containing `compose.yaml`. Use a local Docker context, not a remote daemon.
 
 ```sh
 docker compose up --build -d
@@ -28,7 +28,7 @@ sudo tailscale serve --bg http://127.0.0.1:8765
 tailscale serve status
 ```
 
-Follow the HTTPS setup prompt if shown. Use the HTTPS URL printed by Serve for the dashboard, and append `/mcp` for your agents. Handoff only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `HANDOFF_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Use Tailscale access rules to restrict who can reach it; anyone with access can read and modify the shared inbox.
+Follow the HTTPS setup prompt if shown. Use the HTTPS URL printed by Serve for the dashboard, and append `/mcp` for your agents. Baton only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `BATON_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Use Tailscale access rules to restrict who can reach it; anyone with access can read and modify the shared inbox.
 
 See [Tailscale deployment](docs/remote-http.md) for server setup, client connections, verification, and updates. Tailscale Serve keeps access inside your tailnet and applies its access rules ([Tailscale documentation](https://tailscale.com/docs/features/tailscale-serve)).
 
@@ -41,13 +41,13 @@ Every client uses the same connection details:
 | Transport | Streamable HTTP (often labeled `http`) |
 | Local MCP URL | `http://127.0.0.1:8765/mcp` |
 | Tailscale MCP URL | The Serve HTTPS URL plus `/mcp`, for example `https://myserver.example-tailnet.ts.net/mcp` |
-| Handoff authentication | None — no token, headers, or environment variables |
+| Baton authentication | None — no token, headers, or environment variables |
 
-For Tailscale hosting, replace `http://127.0.0.1:8765/mcp` in any example below with your Serve HTTPS URL plus `/mcp`. The machine or runtime making the MCP request must be able to reach your tailnet. Docker and Python are needed only on the Handoff server, not on clients.
+For Tailscale hosting, replace `http://127.0.0.1:8765/mcp` in any example below with your Serve HTTPS URL plus `/mcp`. The machine or runtime making the MCP request must be able to reach your tailnet. Docker and Python are needed only on the Baton server, not on clients.
 
 Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), [Hermes Agent](#hermes-agent), or [generic MCP client](#generic-mcp-client).
 
-For localhost or Tailscale, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Handoff registrations.
+For localhost or Tailscale, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Baton registrations.
 
 Use the add command first where shown below; editing the configuration file is an alternative. Choose one method per client. When editing files, merge the example into existing configuration. Replace any old `handoff` entry using `command` and `args`; do not combine command-based and URL-based settings or create a duplicate registration.
 
@@ -56,18 +56,18 @@ Use the add command first where shown below; editing the configuration file is a
 **Option 1 — add command (recommended)**
 
 ```bash
-codex mcp add handoff --url http://127.0.0.1:8765/mcp
+codex mcp add baton --url http://127.0.0.1:8765/mcp
 codex mcp list
 ```
 
-If an old registration needs to be removed first, run `codex mcp remove handoff`, then rerun the add command.
+If an old registration needs to be removed first, run `codex mcp remove baton`, then rerun the add command.
 
 **Option 2 — edit TOML**
 
 Merge [clients/codex.toml](clients/codex.toml) into `~/.codex/config.toml`, or `.codex/config.toml` for a trusted project:
 
 ```toml
-[mcp_servers.handoff]
+[mcp_servers.baton]
 url = "http://127.0.0.1:8765/mcp"
 startup_timeout_sec = 15
 tool_timeout_sec = 30
@@ -82,11 +82,11 @@ Reference: [OpenAI MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?
 **Option 1 — add command (recommended)**
 
 ```bash
-claude mcp add --scope user --transport http handoff http://127.0.0.1:8765/mcp
+claude mcp add --scope user --transport http baton http://127.0.0.1:8765/mcp
 claude mcp list
 ```
 
-For project scope, replace `--scope user` with `--scope project`. If an old user registration already exists, run `claude mcp remove --scope user handoff` before adding it again; use the matching scope for a project or local registration.
+For project scope, replace `--scope user` with `--scope project`. If an old user registration already exists, run `claude mcp remove --scope user baton` before adding it again; use the matching scope for a project or local registration.
 
 **Option 2 — edit JSON**
 
@@ -95,7 +95,7 @@ Merge [clients/claude-code.json](clients/claude-code.json) into `.mcp.json` at y
 ```json
 {
   "mcpServers": {
-    "handoff": {
+    "baton": {
       "type": "http",
       "url": "http://127.0.0.1:8765/mcp"
     }
@@ -114,14 +114,14 @@ Merge [clients/cursor.json](clients/cursor.json) into `~/.cursor/mcp.json` for y
 ```json
 {
   "mcpServers": {
-    "handoff": {
+    "baton": {
       "url": "http://127.0.0.1:8765/mcp"
     }
   }
 }
 ```
 
-Reload Cursor if necessary, enable `handoff` in its MCP settings, and check that the tools are available to the agent.
+Reload Cursor if necessary, enable `baton` in its MCP settings, and check that the tools are available to the agent.
 
 Reference: [Cursor MCP documentation](https://cursor.com/docs/mcp).
 
@@ -132,7 +132,7 @@ Merge [clients/omp.json](clients/omp.json) into `.omp/mcp.json` for a project or
 ```json
 {
   "mcpServers": {
-    "handoff": {
+    "baton": {
       "type": "http",
       "url": "http://127.0.0.1:8765/mcp"
     }
@@ -145,10 +145,10 @@ Named profiles use `~/.omp/profiles/<name>/agent/mcp.json`. In OMP, run:
 ```text
 /mcp reload
 /mcp list
-/mcp test handoff
+/mcp test baton
 ```
 
-OMP may discover an existing Handoff entry from another client. Check `/mcp list` for its source and replace any old command-based entry rather than adding a duplicate.
+OMP may discover an existing Baton entry from another client. Check `/mcp list` for its source and replace any old command-based entry rather than adding a duplicate.
 
 Reference: [Oh My Pi MCP configuration](https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md).
 
@@ -157,18 +157,18 @@ Reference: [Oh My Pi MCP configuration](https://github.com/can1357/oh-my-pi/blob
 **Option 1 — add command (recommended)**
 
 ```bash
-hermes mcp add handoff --url http://127.0.0.1:8765/mcp
+hermes mcp add baton --url http://127.0.0.1:8765/mcp
 hermes mcp list
-hermes mcp test handoff
+hermes mcp test baton
 ```
 
 For a Tailscale server, use its HTTPS endpoint instead:
 
 ```bash
-hermes mcp add handoff --url https://myserver.example-tailnet.ts.net/mcp
+hermes mcp add baton --url https://myserver.example-tailnet.ts.net/mcp
 ```
 
-Use your actual Serve hostname. If replacing an existing registration, run `hermes mcp remove handoff` first. No `--auth` option or login is needed.
+Use your actual Serve hostname. If replacing an existing registration, run `hermes mcp remove baton` first. No `--auth` option or login is needed.
 
 **Option 2 — edit YAML**
 
@@ -176,27 +176,27 @@ Merge [clients/hermes.yaml](clients/hermes.yaml) into `~/.hermes/config.yaml` (o
 
 ```yaml
 mcp_servers:
-  handoff:
+  baton:
     url: "http://127.0.0.1:8765/mcp"
 ```
 
-Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_handoff_handoff_push`. Ask it to list handoffs to verify a tool call, then use the upload/resume workflow below.
+Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_handoff_push`. Ask it to list handoffs to verify a tool call, then use the upload/resume workflow below.
 
 References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
 
 ### Generic MCP client
 
-Add a server named `handoff`, select **Streamable HTTP**, enter `http://127.0.0.1:8765/mcp` or your Tailscale HTTPS endpoint, and leave authentication set to **None**. No command, token, or authorization header is needed.
+Add a server named `baton`, select **Streamable HTTP**, enter `http://127.0.0.1:8765/mcp` or your Tailscale HTTPS endpoint, and leave authentication set to **None**. No command, token, or authorization header is needed.
 
 [clients/generic-http.json](clients/generic-http.json) illustrates a common JSON configuration shape. Adapt its wrapper to your harness; MCP does not define a universal client configuration file. Clients must support Streamable HTTP; legacy SSE-only clients need a compatible adapter.
 
 ### Verify a connection
 
-The client should discover eleven tools: the seven task tools `handoff_push`, `handoff_list`, `handoff_get`, `handoff_claim`, `handoff_resume`, `handoff_complete`, and `handoff_delete`, plus `handoff_memory_read`, `handoff_memory_update`, `handoff_memory_forget`, and `handoff_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
+The client should discover eleven tools: the seven task tools `baton_push`, `baton_list`, `baton_get`, `baton_claim`, `baton_resume`, `baton_complete`, and `baton_delete`, plus `baton_memory_read`, `baton_memory_update`, `baton_memory_forget`, and `baton_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
 
 Ask the agent:
 
-> Use Handoff's handoff_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
+> Use Baton's baton_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
 
 An empty successful result is fine. A configured-server listing alone does not prove that tool calls work. After this read-only check, use the workflow below to test a transfer between any two clients.
 
@@ -204,18 +204,18 @@ An empty successful result is fine. A configured-server listing alone does not p
 
 - **Client asks for a token:** remove old `bearer_token_env_var` settings or `Authorization` headers, or remove and re-add the registration using the commands above. If the local server itself still returns 401, rebuild it with `docker compose up --build -d`.
 - **Connection refused:** verify the server is running and the URL is reachable from the harness. `127.0.0.1` always refers to the client's own machine or runtime; a remote harness needs a reachable server URL.
-- **HTTP 403:** Handoff still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `HANDOFF_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
+- **HTTP 403:** Baton still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `BATON_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
 - **Server registered but tools missing:** reload the MCP configuration or start a fresh client session, check that the server is enabled, and approve project configuration where required.
 - **Client still tries to run Docker:** remove the previous `command` and `args` entry and use the HTTP example for that client. The HTTP connection does not execute anything on the client.
-- **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 handoff` on the server.
+- **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 baton` on the server.
 
 ## Try it
 
-With Handoff connected and its tools enabled, say:
+With Baton connected and its tools enabled, say:
 
 > Upload a handoff so I can continue this conversation later.
 
-The MCP supplies the agent with upload instructions and the field schema. The agent should summarize the context available to it, choose a useful title, save through `handoff_push`, and return a saved ID with a resume prompt. You do not need to specify JSON, tool arguments, a recipient, or a checklist of fields. Upload saves context; it does not claim or complete the underlying task.
+The MCP supplies the agent with upload instructions and the field schema. The agent should summarize the context available to it, choose a useful title, save through `baton_push`, and return a saved ID with a resume prompt. You do not need to specify JSON, tool arguments, a recipient, or a checklist of fields. Upload saves context; it does not claim or complete the underlying task.
 
 The saved summary should include your goal, requirements and preferences, decisions and their stated reasons, progress, unsuccessful attempts, unresolved questions, useful references, and next steps. For an open-ended conversation, the next step can be to review the context and ask where you want to continue. Unknown or unavailable context should be recorded as missing rather than invented. The handoff is a summary of the context available to the agent, not an automatic export of the entire chat or its attachments.
 
@@ -225,28 +225,28 @@ Later, in a fresh session of any connected harness, paste the returned prompt:
 
 > Resume Handoff `<id>`.
 
-The recipient calls `handoff_resume`, which claims the handoff and returns its saved context in one step, then checks your current instructions and any relevant workspace before continuing work. It records completion only with observed results.
+The recipient calls `baton_resume`, which claims the handoff and returns its saved context in one step, then checks your current instructions and any relevant workspace before continuing work. It records completion only with observed results.
 
 ### Prompts
 
-Clients that support MCP prompts show Handoff's prompts as commands. In Claude Code they appear as slash commands:
+Clients that support MCP prompts show Baton's prompts as commands. In Claude Code they appear as slash commands:
 
 | Command | What it does |
 | --- | --- |
-| `/mcp__handoff__save [target] [focus]` | Saves the conversation; optionally names a receiving harness and what to emphasise. |
-| `/mcp__handoff__resume <id>` | Claims the handoff and continues it. If it is already claimed or completed, the agent reads and summarises it instead. |
-| `/mcp__handoff__inbox` | Lists handoffs that are ready to resume and asks which one to pick. |
+| `/mcp__baton__save [target] [focus]` | Saves the conversation; optionally names a receiving harness and what to emphasise. |
+| `/mcp__baton__resume <id>` | Claims the handoff and continues it. If it is already claimed or completed, the agent reads and summarises it instead. |
+| `/mcp__baton__inbox` | Lists handoffs that are ready to resume and asks which one to pick. |
 
 Other clients name prompts differently; the plain-language requests above work everywhere.
 
-The receiving agent needs its own access to the project files and tools required for the task. Handoff transfers the saved context, not the workspace.
+The receiving agent needs its own access to the project files and tools required for the task. Baton transfers the saved context, not the workspace.
 
 You can also click **Copy resume prompt** on any dashboard record. The dashboard lists all handoffs with status, project and receiving-agent filters, title/project/ID search, paginated results, and 15-second refreshes. Click a record to see all context, references, metadata, outcome, raw JSON and paginated activity history.
 
 To add a single, clearly labeled welcome example:
 
 ```sh
-docker exec handoff python -m handoff seed-demo
+docker exec baton python -m baton seed-demo
 ```
 
 Running that command twice reuses the same saved example. The app never seeds fake work automatically.
@@ -255,13 +255,13 @@ Running that command twice reuses the same saved example. The app never seeds fa
 
 | Tool | Behavior |
 | --- | --- |
-| `handoff_push` | Validate and save immutable source context. Return an ID and receipt. |
-| `handoff_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
-| `handoff_get` | Return every record field and the current lifecycle state, without changing anything. |
-| `handoff_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
-| `handoff_claim` | Acquire, renew or release a lease. Acquire returns a claim token; renew and release need only the ID and token. |
-| `handoff_complete` | Record success, blocked work or abandonment, using the claim token. |
-| `handoff_delete` | Permanently delete a handoff and its history (refused while another agent holds an active claim). Agents are told to use it only on explicit request. |
+| `baton_push` | Validate and save immutable source context. Return an ID and receipt. |
+| `baton_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
+| `baton_get` | Return every record field and the current lifecycle state, without changing anything. |
+| `baton_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
+| `baton_claim` | Acquire, renew or release a lease. Acquire returns a claim token; renew and release need only the ID and token. |
+| `baton_complete` | Record success, blocked work or abandonment, using the claim token. |
+| `baton_delete` | Permanently delete a handoff and its history (refused while another agent holds an active claim). Agents are told to use it only on explicit request. |
 
 Task mutations (except deletion) accept an optional `operation_id` (any UUID, any case). Supply one to make retries safe: after uncertain delivery, retry the **identical request and operation ID**. Changing its arguments returns `IDEMPOTENCY_CONFLICT`. Without an operation ID, a retry creates a second record or action. The `replayed` flag means the receipt is historical: fetch current state before relying on an old claim. Receipts are kept for 7 days; a retry after that is treated as a new request.
 
@@ -273,28 +273,28 @@ For `outcome="succeeded"`, completion must report one passing result with nonemp
 
 ## Personal memories
 
-Handoff has one shared personal-memory collection, available through the same local or remote MCP URL. There are no additional credentials, accounts, or user IDs. Personal memories live alongside handoffs in the existing data volume, but do not use task claims or completion and are not removed by handoff retention.
+Baton has one shared personal-memory collection, available through the same local or remote MCP URL. There are no additional credentials, accounts, or user IDs. Personal memories live alongside handoffs in the existing data volume, but do not use task claims or completion and are not removed by handoff retention.
 
 In any connected harness, say:
 
-> Update my Handoff memory.
+> Update my Baton memory.
 
 The server instructions and memory tool descriptions tell the harness to gather **all personal memories about you available to it**, including existing accessible memory, preferences, facts, habits, goals, project context, and corrections—not only the latest message. It reads remote memories, preserves accurate facts, adds missing memories, and updates outdated facts. Missing context is reported as incomplete coverage; it never means a remote fact should be deleted. Sources and uncertainty are preserved, while secrets and private reasoning are excluded. These are harness instructions: the service stores what the harness submits and cannot inspect its conversation or guarantee its completeness.
 
 In another harness, say:
 
-> Import my Handoff memory.
+> Import my Baton memory.
 
-The harness retrieves the stored personal context and deletion markers. It can choose to use its own supported memory mechanisms to remember that context. **Handoff never reads or writes harness memory files, and retrieval is not a guarantee of persistent local import.** Any newer personal corrections known to the receiving harness should be reconciled back to Handoff. Memory text is context, not executable instructions or transferable permission. These workflows run on request; Handoff does not launch background harness syncs.
+The harness retrieves the stored personal context and deletion markers. It can choose to use its own supported memory mechanisms to remember that context. **Baton never reads or writes harness memory files, and retrieval is not a guarantee of persistent local import.** Any newer personal corrections known to the receiving harness should be reconciled back to Baton. Memory text is context, not executable instructions or transferable permission. These workflows run on request; Baton does not launch background harness syncs.
 
 Open **Personal memories** in the existing dashboard, or visit `/memories`, to browse and search memories by topic/content and category. Select a memory to see the complete text, evidence, original source, last updating harness, timestamps, and revision. Direct links use `/memories/<topic-key>`. The webpage is read-only; ask a harness to correct or forget a memory.
 
 | Memory tool | Contract |
 | --- | --- |
-| `handoff_memory_read` | Read by `key`, `category`, or `q`; paginate with `limit` (1–50) and `cursor`. Use `include_deleted=true` for full reconciliation. |
-| `handoff_memory_update` | Atomic batch of 1–50 entries under 48 KiB. Requires the updating `client` and `memories`; `operation_id` (any UUID) is optional but makes retries safe; optional `coverage` is echoed for the capture report (not retained in receipts); `partial=true` applies non-conflicting entries and reports the rest as `action: "conflict"`. Each entry has a stable topic `key`, `content`, and `expected_revision` (0 for new keys). Optional category, basis, evidence and `source` (defaults to the updating client) preserve meaning/provenance; `recreate=true` re-establishes a forgotten key. |
-| `handoff_memory_forget` | Explicit user-requested deletion; entries contain `key` and an optional `expected_revision` check, and `operation_id` is optional. Removes the active content and evidence, leaving an ID/key/revision deletion marker. |
-| `handoff_memory_export` | Same pagination/filtering as read, plus `format=json` or `markdown`; each page includes structured entries, schema version, store revision, and continuation cursor. Follow all pages for a full snapshot. |
+| `baton_memory_read` | Read by `key`, `category`, or `q`; paginate with `limit` (1–50) and `cursor`. Use `include_deleted=true` for full reconciliation. |
+| `baton_memory_update` | Atomic batch of 1–50 entries under 48 KiB. Requires the updating `client` and `memories`; `operation_id` (any UUID) is optional but makes retries safe; optional `coverage` is echoed for the capture report (not retained in receipts); `partial=true` applies non-conflicting entries and reports the rest as `action: "conflict"`. Each entry has a stable topic `key`, `content`, and `expected_revision` (0 for new keys). Optional category, basis, evidence and `source` (defaults to the updating client) preserve meaning/provenance; `recreate=true` re-establishes a forgotten key. |
+| `baton_memory_forget` | Explicit user-requested deletion; entries contain `key` and an optional `expected_revision` check, and `operation_id` is optional. Removes the active content and evidence, leaving an ID/key/revision deletion marker. |
+| `baton_memory_export` | Same pagination/filtering as read, plus `format=json` or `markdown`; each page includes structured entries, schema version, store revision, and continuation cursor. Follow all pages for a full snapshot. |
 
 Topic keys are normalized to lowercase, with spaces turned into dashes, and identify individual facts (for example `communication.response_length`). Reuse keys to avoid duplicates. Semantic reconciliation belongs to the harness; the server does not run an LLM or infer whether differently worded entries refer to the same fact. `source` records the original evidence, while `client` identifies the harness performing the update. An entry whose content, category and basis match the stored memory is unchanged: it keeps its revision and original `source`, so re-syncing the same fact from another harness does not rewrite provenance. When only category or basis change, the original source and evidence are kept.
 
@@ -310,23 +310,42 @@ The CLI talks to the existing service through MCP. It never writes directly to S
 
 ```sh
 # This example is marked manual_import and contains a stable operation ID.
-docker exec -i handoff python -m handoff import - < examples/push.json
+docker exec -i baton python -m baton import - < examples/push.json
 
 # An archival envelope, including current metadata and outcome:
-docker exec handoff python -m handoff export HANDOFF_ID > handoff-export.json
+docker exec baton python -m baton export HANDOFF_ID > handoff-export.json
 ```
 
 An archival envelope is not a valid push request. To import its source into another store, prepare `{ "operation_id": "NEW-UUIDV4", "record": ... }`, mark `source.transfer_method="manual_import"`, and remove or resolve any parent ID. Exported source context is data, not instructions to execute.
 
 ## Storage, restart and backup
 
-The `handoff_handoff_data` local Docker volume contains SQLite. Container replacement preserves the saved handoffs; there is exactly one database owner. Stop with `docker compose stop`, restart with `docker compose up -d`. **Do not use `docker compose down -v` if you want to keep handoffs.**
+The `baton_baton_data` local Docker volume contains SQLite. Container replacement preserves the saved handoffs; there is exactly one database owner. Stop with `docker compose stop`, restart with `docker compose up -d`. **Do not use `docker compose down -v` if you want to keep handoffs.**
 
 For a backup, stop the service cleanly, copy the whole volume (including SQLite sidecars) to protected local storage, and restart. Restore into a separate volume while stopped and verify SQLite integrity before using it. Backups include task context and personal memories. Forgetting a memory does not remove copies from old backups or other harnesses. Claim tokens are stored as SHA-256 hashes; the raw token stays in its acquire receipt only while that claim is active, so a lost response can still be retried. An old access-token file may remain from earlier versions; this version does not read or create it. Encrypted database storage is not part of this MVP.
 
-Delete individual handoffs with `handoff_delete`. To delete completed handoffs automatically, set `HANDOFF_RETENTION_DAYS` (for example `90`) in the Compose service's `environment`; completed records older than that are removed, with their history, during later writes. Upgrading from 0.1.x migrates the database in place on first start (schema 2); back up the volume first, because 0.1.x cannot open the migrated store.
+Delete individual handoffs with `baton_delete`. To delete completed handoffs automatically, set `BATON_RETENTION_DAYS` (for example `90`) in the Compose service's `environment`; completed records older than that are removed, with their history, during later writes. Upgrading from 0.1.x migrates the database in place on first start (schema 2); back up the volume first, because 0.1.x cannot open the migrated store.
 
-The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Handoff contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs and personal memories through MCP. Handoff requires no authentication, and it rejects requests with an unexpected `Host` header. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
+The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Baton contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs and personal memories through MCP. Baton requires no authentication, and it rejects requests with an unexpected `Host` header. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
+
+## Upgrading from Handoff
+
+Baton was previously called Handoff. The data format is unchanged, and an existing `handoff.sqlite3` is renamed to `baton.sqlite3` on first start. The `HANDOFF_*` environment variables still work, but use `BATON_*` going forward.
+
+The Compose project, container and volume names changed, so copy the old volume once. Run this from the repository directory:
+
+```sh
+docker compose -p handoff down          # stop the old container; its volume is kept
+docker compose build
+docker volume create baton_baton_data
+docker run --rm --user 0 --entrypoint sh -v handoff_handoff_data:/from -v baton_baton_data:/to baton:0.5.0 \
+  -c 'cp -a /from/. /to/ && chown 10001:10001 /to && chmod 700 /to'
+docker compose up -d
+```
+
+Once Baton shows your handoffs, you can remove the old volume with `docker volume rm handoff_handoff_data`.
+
+The MCP server is now named `baton`, and the tools are `baton_*` (for example `baton_push` and `baton_resume`). In each harness, remove the old `handoff` registration and add `baton` using the commands above; prompts become `/mcp__baton__save`, `/mcp__baton__resume` and so on. A saved record is still called a handoff, so "Resume Handoff `<id>`" works as before.
 
 ## Development and tests
 
@@ -343,7 +362,7 @@ On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. Tests us
 Local development without Docker:
 
 ```sh
-.venv/bin/python -m handoff --data-dir ./data serve --host 127.0.0.1 --port 8765
+.venv/bin/python -m baton --data-dir ./data serve --host 127.0.0.1 --port 8765
 ```
 
 Never run a second owner against an active data directory. Production packages are pinned in `requirements.lock`; the Docker base is pinned by digest.

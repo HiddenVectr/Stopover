@@ -9,8 +9,8 @@ import uuid
 import httpx
 import pytest
 
-from handoff.sample import sample_record
-from handoff.store import Store
+from baton.sample import sample_record
+from baton.store import Store
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def push(store, record):
     def run(**changes):
         data = copy.deepcopy(record)
         data.update(changes)
-        result = store.execute("handoff_push", {"operation_id": str(uuid.uuid4()), "record": data})
+        result = store.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": data})
         assert result["ok"], result
         return result["data"]
     return run
@@ -43,7 +43,7 @@ def live_server(tmp_path):
         port = sock.getsockname()[1]
     url = f"http://127.0.0.1:{port}"
     log = open(tmp_path / "server.log", "w+")
-    process = subprocess.Popen([sys.executable, "-m", "handoff", "--data-dir", str(tmp_path), "serve", "--host", "127.0.0.1", "--port", str(port)], stdout=log, stderr=log)
+    process = subprocess.Popen([sys.executable, "-m", "baton", "--data-dir", str(tmp_path), "serve", "--host", "127.0.0.1", "--port", str(port)], stdout=log, stderr=log)
     try:
         for _ in range(100):
             if process.poll() is not None:
