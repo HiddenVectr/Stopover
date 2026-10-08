@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Install
+        run: |
+          pip install -r requirements-dev.lock
+          pip install --no-deps -e .
+          python -m playwright install --with-deps chromium
+      - name: Test (store, HTTP, MCP over HTTP and stdio, conformance suite, browser)
+        env:
+          BATON_SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
+        run: pytest -q
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image and check it starts healthy
+        run: |
+          docker build -t baton:ci .
+          docker run -d --name baton-ci -p 127.0.0.1:8765:8765 baton:ci
+          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8765/healthz && exit 0; sleep 1; done
+          docker logs baton-ci; exit 1

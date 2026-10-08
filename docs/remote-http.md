@@ -14,7 +14,7 @@ AI harness on your tailnet
 
 Baton requires no connection token or login. Baton only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or any `*.ts.net` name, which blocks DNS-rebinding attacks from web pages. To reach it by another name or a tailnet IP, add a comma-separated list to `BATON_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Access is otherwise controlled by Tailscale and the server's network configuration. Anyone allowed to reach Baton can read and mutate its shared inbox; there are no separate user permissions inside the application.
 
-Keep Docker's published port bound to loopback (`127.0.0.1:8765:8080`) and use **Tailscale Serve**. Tailscale Funnel publishes services to the internet and is unsuitable for this token-free deployment. Restrict tailnet access to the server's HTTPS port (443) to your intended users/devices. [Tailscale Serve applies tailnet access rules](https://tailscale.com/docs/features/tailscale-serve).
+Keep Docker's published port bound to loopback (`127.0.0.1:8765:8765`) and use **Tailscale Serve**. Tailscale Funnel publishes services to the internet and is unsuitable for this token-free deployment. Restrict tailnet access to the server's HTTPS port (443) to your intended users/devices. [Tailscale Serve applies tailnet access rules](https://tailscale.com/docs/features/tailscale-serve).
 
 The 64 KiB request limit, response security headers, and rejection of browser requests marked `Sec-Fetch-Site: cross-site` remain enabled. No cross-origin browser CORS support is added. These checks do not replace network access control.
 

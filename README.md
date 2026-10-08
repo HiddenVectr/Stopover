@@ -21,7 +21,7 @@ The dashboard opens directly. Local MCP clients use the URL below with authentic
 
 ### Host on your Tailscale network
 
-Run Docker and Tailscale on the same server. Keep the Compose port mapping on `127.0.0.1:8765:8080`, then publish it privately with:
+Run Docker and Tailscale on the same server. Keep the Compose port mapping on `127.0.0.1:8765:8765`, then publish it privately with:
 
 ```sh
 sudo tailscale serve --bg http://127.0.0.1:8765
@@ -180,7 +180,7 @@ mcp_servers:
     url: "http://127.0.0.1:8765/mcp"
 ```
 
-Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_handoff_push`. Ask it to list handoffs to verify a tool call, then use the upload/resume workflow below.
+Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_push`. Ask it to list handoffs to verify a tool call, then use the upload/resume workflow below.
 
 References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
 
@@ -328,25 +328,6 @@ Delete individual handoffs with `baton_delete`. To delete completed handoffs aut
 
 The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Baton contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs and personal memories through MCP. Baton requires no authentication, and it rejects requests with an unexpected `Host` header. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
 
-## Upgrading from Handoff
-
-Baton was previously called Handoff. The data format is unchanged, and an existing `handoff.sqlite3` is renamed to `baton.sqlite3` on first start. The `HANDOFF_*` environment variables still work, but use `BATON_*` going forward.
-
-The Compose project, container and volume names changed, so copy the old volume once. Run this from the repository directory:
-
-```sh
-docker compose -p handoff down          # stop the old container; its volume is kept
-docker compose build
-docker volume create baton_baton_data
-docker run --rm --user 0 --entrypoint sh -v handoff_handoff_data:/from -v baton_baton_data:/to baton:0.5.0 \
-  -c 'cp -a /from/. /to/ && chown 10001:10001 /to && chmod 700 /to'
-docker compose up -d
-```
-
-Once Baton shows your handoffs, you can remove the old volume with `docker volume rm handoff_handoff_data`.
-
-The MCP server is now named `baton`, and the tools are `baton_*` (for example `baton_push` and `baton_resume`). In each harness, remove the old `handoff` registration and add `baton` using the commands above; prompts become `/mcp__baton__save`, `/mcp__baton__resume` and so on. A saved record is still called a handoff, so "Resume Handoff `<id>`" works as before.
-
 ## Development and tests
 
 ```sh
@@ -369,6 +350,10 @@ Never run a second owner against an active data directory. Production packages a
 
 ## References and scope
 
-The original proposal is retained in [outputs/docs/mvp-v1.md](outputs/docs/mvp-v1.md) as historical planning material. The service exposes a shared MCP inbox for harnesses supporting Streamable HTTP. The older stdio bridge remains a compatibility option; the documented client setup uses direct HTTP. The client instructions above cover Codex, Claude Code, Cursor, OMP, Hermes Agent, and generic clients; they are not an exhaustive compatibility list. Remote HTTPS hosting through Tailscale Serve is described in [Tailscale deployment](docs/remote-http.md). Automatic agent launching, vector search and separate per-user access controls are outside this build. See [docs/implementation.md](docs/implementation.md) for implementation notes and recorded verification; setup examples do not imply every client has been tested end to end.
+The service exposes a shared MCP inbox for harnesses supporting Streamable HTTP. The older stdio bridge remains a compatibility option; the documented client setup uses direct HTTP. The client instructions above cover Codex, Claude Code, Cursor, OMP, Hermes Agent, and generic clients; they are not an exhaustive compatibility list. Remote HTTPS hosting through Tailscale Serve is described in [Tailscale deployment](docs/remote-http.md). Automatic agent launching, vector search and separate per-user access controls are outside this build. See [docs/implementation.md](docs/implementation.md) for implementation notes and recorded verification; setup examples do not imply every client has been tested end to end.
 
 Client-specific references are linked in each setup section. The server uses the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).
+
+## License
+
+Baton is licensed under the [Apache License 2.0](LICENSE). See [CHANGELOG.md](CHANGELOG.md) for release notes.
