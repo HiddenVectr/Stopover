@@ -219,7 +219,9 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
 
     async def session(request):
         return JSONResponse({"user": {"login": "alice", "name": "Alice Example"}, "workspace": {"name": "Alice's workspace"},
-                             "logout_url": "/fake-logout"})
+                             "logout_url": "/fake-logout", "access_token_url": "/settings/tokens",
+                             "links": [{"label": "Access tokens", "url": "/settings/tokens"},
+                                       {"label": "Elsewhere", "url": "https://evil.example/"}, {"label": "Protocol", "url": "//evil.example"}]})
 
     app = create_app(tmp_path, auth=auth, login_url="/fake-login", extra_routes=[
         Route("/fake-login", login), Route("/fake-login/complete", complete),
@@ -248,6 +250,15 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
             expect(page.locator("#workspace-name")).to_have_text("Alice's workspace")
             expect(page.locator("#workspace-detail")).to_have_text("Signed in as alice")
             expect(page.locator("#signin-dialog")).not_to_be_visible()
+            # Host links: same-origin only.
+            expect(page.locator("#host-links a")).to_have_count(1)
+            expect(page.get_by_role("link", name="Access tokens")).to_have_attribute("href", "/settings/tokens")
+            # The setup dialog tells the user to create a token rather than "no token needed".
+            page.get_by_role("button", name="Connect your agents").first.click()
+            expect(page.locator("#claude-add")).to_contain_text('--header "Authorization: Bearer YOUR_TOKEN"')
+            expect(page.get_by_role("link", name="Create an access token")).to_have_attribute("href", "/settings/tokens")
+            expect(page.locator("#setup-intro")).not_to_contain_text("No token")
+            page.get_by_role("button", name="Close connection instructions").click()
             page.get_by_role("button", name="Sign out").click()
             expect(page.get_by_role("heading", name="Host login")).to_be_visible()
             assert not errors, errors

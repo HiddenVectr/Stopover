@@ -327,9 +327,16 @@ $('refresh-button').addEventListener('click', refresh);
 $('load-more').addEventListener('click', () => loadList(true));
 const mcpUrl = new URL('/mcp', location.origin).href;
 $('mcp-url').textContent = mcpUrl;
+function sameOriginPath(url) {
+  return typeof url === 'string' && url.startsWith('/') && !url.startsWith('//');
+}
+
 function updateAuthUI() {
-  const signedIn = Boolean(accessToken());
-  $('signout-button').hidden = !signedIn && !session?.logout_url;
+  // Token instructions apply when the dashboard itself uses a token, or the host issues access tokens.
+  const signedIn = Boolean(accessToken()) || sameOriginPath(session?.access_token_url);
+  $('signout-button').hidden = !accessToken() && !session?.logout_url;
+  $('setup-token-link').hidden = !sameOriginPath(session?.access_token_url);
+  if (sameOriginPath(session?.access_token_url)) $('setup-token-anchor').href = session.access_token_url;
   // Show a placeholder rather than the real token so it never appears in screenshots or screen shares.
   $('codex-add').textContent = signedIn ? `export BATON_TOKEN=YOUR_TOKEN\ncodex mcp add baton --url ${mcpUrl} --bearer-token-env-var BATON_TOKEN` : `codex mcp add baton --url ${mcpUrl}`;
   $('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
@@ -374,7 +381,11 @@ async function loadSession() {
     $('workspace-name').textContent = session.workspace?.name || name;
     $('workspace-detail').textContent = session.user?.login ? `Signed in as ${session.user.login}` : 'Signed in';
     $('workspace-avatar').textContent = name.trim().charAt(0).toUpperCase() || '·';
-    if (session.logout_url) $('signout-button').hidden = false;
+    // Host-provided account links (e.g. access tokens); same-origin paths only.
+    const links = (Array.isArray(session.links) ? session.links : []).filter((link) => link && typeof link.label === 'string' && sameOriginPath(link.url));
+    $('host-links').replaceChildren(...links.map((link) => { const a = el('a', '', link.label); a.href = link.url; return a; }));
+    $('host-links').hidden = !links.length;
+    updateAuthUI();
   } catch { /* optional */ }
 }
 loadSession();
