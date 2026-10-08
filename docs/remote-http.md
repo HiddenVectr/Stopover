@@ -32,7 +32,7 @@ docker compose ps
 curl --fail http://127.0.0.1:8765/healthz
 ```
 
-The health response should contain `"ready": true`. The named Docker volume stores handoffs across container replacements. A fresh server starts with its own store; cloning the repository does not copy handoffs from another machine. To move existing data, follow the [backup and restore guidance](../README.md#storage-restart-and-backup).
+The health response should contain `"ready": true`. The named Docker volume stores handoffs across container replacements. A fresh server starts with its own store; cloning the repository does not copy handoffs from another machine. To move existing data, follow the [backup and restore guidance](operations.md#storage-restart-and-backup).
 
 ## 2. Enable private HTTPS
 
@@ -58,7 +58,7 @@ Use these settings from devices permitted by your tailnet rules:
 | Authentication | None |
 | Dashboard | `https://myserver.example-tailnet.ts.net/` |
 
-Follow the [client setup instructions](../README.md#connect-an-ai-harness) for Codex, Claude Code, Cursor, OMP, Hermes Agent, or a generic client. Replace the localhost URL with the MCP URL above in either the add command or configuration file. Remove obsolete token settings from older registrations.
+Follow the [client setup instructions](clients.md) for Codex, Claude Code, Cursor, OMP, Hermes Agent, or a generic client. Replace the localhost URL with the MCP URL above in either the add command or configuration file. Remove obsolete token settings from older registrations.
 
 The process making the MCP connection must have tailnet access. For a remote agent, container, VM, or hosted harness, check connectivity from that runtime; having Tailscale on your laptop alone does not give a cloud agent access. Clients must support Streamable HTTP or use a compatible adapter.
 
