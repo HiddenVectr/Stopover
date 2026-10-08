@@ -6,5 +6,5 @@ RUN pip install --no-cache-dir -r requirements.lock
 COPY src ./src
 RUN pip install --no-cache-dir --no-deps . && useradd --uid 10001 --create-home baton && mkdir /data && chown baton:baton /data && chmod 700 /data
 USER 10001:10001
-EXPOSE 8080
+EXPOSE 8765
 CMD ["python", "-m", "baton", "serve", "--host", "0.0.0.0"]

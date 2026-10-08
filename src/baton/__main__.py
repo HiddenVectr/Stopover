@@ -29,11 +29,11 @@ async def call_remote(url, name, arguments):
 def main():
     parser = argparse.ArgumentParser(description="Local Baton MCP service and tools")
     parser.add_argument("--data-dir", default=env("DATA_DIR", "/data"))
-    parser.add_argument("--url", default=env("URL", "http://127.0.0.1:8080/mcp"))
+    parser.add_argument("--url", default=env("URL", "http://127.0.0.1:8765/mcp"))
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8080)
+    serve.add_argument("--port", type=int, default=8765)
     sub.add_parser("bridge", help="Serve stdio by forwarding to the running service")
     sub.add_parser("seed-demo", help="Explicitly add one synthetic welcome handoff")
     imp = sub.add_parser("import", help="Import a push request through MCP (does not open SQLite)")
