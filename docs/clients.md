@@ -1,0 +1,185 @@
+# Connect an AI harness
+
+Baton works with any MCP client that supports **Streamable HTTP**. This page has setup steps for each tested client, how to verify the connection, and troubleshooting.
+
+Every client uses the same connection details:
+
+| Setting | Value |
+| --- | --- |
+| Transport | Streamable HTTP (often labeled `http`) |
+| Local MCP URL | `http://127.0.0.1:8765/mcp` |
+| Tailscale MCP URL | The Serve HTTPS URL plus `/mcp`, for example `https://myserver.example-tailnet.ts.net/mcp` |
+| Baton authentication | None — no token, headers, or environment variables |
+
+For Tailscale hosting, replace `http://127.0.0.1:8765/mcp` in any example below with your Serve HTTPS URL plus `/mcp`. The machine or runtime making the MCP request must be able to reach your tailnet. Docker and Python are needed only on the Baton server, not on clients.
+
+
+For a server on another machine, see [Tailscale deployment](remote-http.md).
+
+Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), [Hermes Agent](#hermes-agent), or [generic MCP client](#generic-mcp-client).
+
+For localhost or Tailscale, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Baton registrations.
+
+Use the add command first where shown below; editing the configuration file is an alternative. Choose one method per client. When editing files, merge the example into existing configuration. Replace any old `handoff` entry using `command` and `args`; do not combine command-based and URL-based settings or create a duplicate registration.
+
+## Codex
+
+**Option 1 — add command (recommended)**
+
+```bash
+codex mcp add baton --url http://127.0.0.1:8765/mcp
+codex mcp list
+```
+
+If an old registration needs to be removed first, run `codex mcp remove baton`, then rerun the add command.
+
+**Option 2 — edit TOML**
+
+Merge [clients/codex.toml](../clients/codex.toml) into `~/.codex/config.toml`, or `.codex/config.toml` for a trusted project:
+
+```toml
+[mcp_servers.baton]
+url = "http://127.0.0.1:8765/mcp"
+startup_timeout_sec = 15
+tool_timeout_sec = 30
+```
+
+Start a fresh Codex session and use `/mcp` in the CLI to check the connection. `codex mcp list` lists registrations. Use the configuration file belonging to the Codex home used by your CLI, desktop app, or IDE extension.
+
+Reference: [OpenAI MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+## Claude Code
+
+**Option 1 — add command (recommended)**
+
+```bash
+claude mcp add --scope user --transport http baton http://127.0.0.1:8765/mcp
+claude mcp list
+```
+
+For project scope, replace `--scope user` with `--scope project`. If an old user registration already exists, run `claude mcp remove --scope user baton` before adding it again; use the matching scope for a project or local registration.
+
+**Option 2 — edit JSON**
+
+Merge [clients/claude-code.json](../clients/claude-code.json) into `.mcp.json` at your project's root:
+
+```json
+{
+  "mcpServers": {
+    "baton": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+Open a fresh Claude Code session, approve the project configuration if prompted, and use `/mcp` to check the connection.
+
+Reference: [Claude Code MCP documentation](https://code.claude.com/docs/en/mcp).
+
+## Cursor
+
+Merge [clients/cursor.json](../clients/cursor.json) into `~/.cursor/mcp.json` for your user account, or `.cursor/mcp.json` for a project:
+
+```json
+{
+  "mcpServers": {
+    "baton": {
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+Reload Cursor if necessary, enable `baton` in its MCP settings, and check that the tools are available to the agent.
+
+Reference: [Cursor MCP documentation](https://cursor.com/docs/mcp).
+
+## OMP / Oh My Pi
+
+Merge [clients/omp.json](../clients/omp.json) into `.omp/mcp.json` for a project or `~/.omp/agent/mcp.json` for your default user profile:
+
+```json
+{
+  "mcpServers": {
+    "baton": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp"
+    }
+  }
+}
+```
+
+Named profiles use `~/.omp/profiles/<name>/agent/mcp.json`. In OMP, run:
+
+```text
+/mcp reload
+/mcp list
+/mcp test baton
+```
+
+OMP may discover an existing Baton entry from another client. Check `/mcp list` for its source and replace any old command-based entry rather than adding a duplicate.
+
+Reference: [Oh My Pi MCP configuration](https://github.com/can1357/oh-my-pi/blob/main/docs/mcp-config.md).
+
+## Hermes Agent
+
+**Option 1 — add command (recommended)**
+
+```bash
+hermes mcp add baton --url http://127.0.0.1:8765/mcp
+hermes mcp list
+hermes mcp test baton
+```
+
+For a Tailscale server, use its HTTPS endpoint instead:
+
+```bash
+hermes mcp add baton --url https://myserver.example-tailnet.ts.net/mcp
+```
+
+Use your actual Serve hostname. If replacing an existing registration, run `hermes mcp remove baton` first. No `--auth` option or login is needed.
+
+**Option 2 — edit YAML**
+
+Merge [clients/hermes.yaml](../clients/hermes.yaml) into `~/.hermes/config.yaml` (or the `config.yaml` in your active `HERMES_HOME`):
+
+```yaml
+mcp_servers:
+  baton:
+    url: "http://127.0.0.1:8765/mcp"
+```
+
+Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_push`. Ask it to list handoffs to verify a tool call, then try the [upload and resume workflow](../README.md#quickstart).
+
+References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
+
+## Generic MCP client
+
+Add a server named `baton`, select **Streamable HTTP**, enter `http://127.0.0.1:8765/mcp` or your Tailscale HTTPS endpoint, and leave authentication set to **None**. No command, token, or authorization header is needed.
+
+[clients/generic-http.json](../clients/generic-http.json) illustrates a common JSON configuration shape. Adapt its wrapper to your harness; MCP does not define a universal client configuration file. Clients must support Streamable HTTP; legacy SSE-only clients need a compatible adapter.
+
+## Verify a connection
+
+The client should discover eleven tools: the seven task tools `baton_push`, `baton_list`, `baton_get`, `baton_claim`, `baton_resume`, `baton_complete`, and `baton_delete`, plus `baton_memory_read`, `baton_memory_update`, `baton_memory_forget`, and `baton_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
+
+Ask the agent:
+
+> Use Baton's baton_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
+
+An empty successful result is fine. A configured-server listing alone does not prove that tool calls work. After this read-only check, upload a handoff in one client and resume it in another to test a transfer.
+
+## Troubleshooting connections
+
+- **Client asks for a token:** remove old `bearer_token_env_var` settings or `Authorization` headers, or remove and re-add the registration using the commands above. If the local server itself still returns 401, rebuild it with `docker compose up --build -d`.
+- **Connection refused:** verify the server is running and the URL is reachable from the harness. `127.0.0.1` always refers to the client's own machine or runtime; a remote harness needs a reachable server URL.
+- **HTTP 403:** Baton still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `BATON_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
+- **Server registered but tools missing:** reload the MCP configuration or start a fresh client session, check that the server is enabled, and approve project configuration where required.
+- **Client still tries to run Docker:** remove the previous `command` and `args` entry and use the HTTP example for that client. The HTTP connection does not execute anything on the client.
+- **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 baton` on the server.
+
+## Compatibility notes
+
+The setup steps above are not an exhaustive compatibility list, and an example does not mean every client has been tested end to end. Clients must support Streamable HTTP. The older stdio bridge (`python -m baton bridge`) remains for clients that can only launch a command, but direct HTTP is the documented setup.
