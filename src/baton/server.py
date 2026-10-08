@@ -136,8 +136,14 @@ class RequestBoundary:
         headers = dict(scope["headers"])
         # Native MCP clients do not send Fetch Metadata. Reject cross-site browser
         # requests even when a browser omits Origin (for example an image GET).
+        # Top-level GET/HEAD navigations are allowed: following a link from another site, or a sign-in
+        # provider redirecting back. The other site can't read the response, and nothing changes state.
         if headers.get(b"sec-fetch-site", b"").lower() == b"cross-site":
-            return await JSONResponse({"error": "Cross-site request not allowed"}, status_code=403)(scope, receive, send)
+            navigation = (headers.get(b"sec-fetch-mode", b"").lower() == b"navigate"
+                          and headers.get(b"sec-fetch-dest", b"document").lower() == b"document"
+                          and scope["method"] in ("GET", "HEAD"))
+            if not navigation:
+                return await JSONResponse({"error": "Cross-site request not allowed"}, status_code=403)(scope, receive, send)
         # Enforce bytes even for chunked bodies; never trust Content-Length alone.
         body = bytearray()
         while True:
