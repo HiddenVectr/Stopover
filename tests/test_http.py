@@ -37,6 +37,20 @@ def test_remote_dashboard_and_api_accept_host_and_origin(tmp_path, base_url, ori
         assert client.post("/mcp", content=b"x" * 65537).status_code == 413
 
 
+def test_cross_site_navigations_are_allowed_but_not_requests(tmp_path):
+    navigate = {"sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document"}
+    with TestClient(create_app(tmp_path), base_url="https://handoff.example-tailnet.ts.net") as client:
+        # Following a link from another site (or a sign-in provider redirecting back) works.
+        assert client.get("/", headers=navigate).status_code == 200
+        assert client.get("/memories", headers=navigate).status_code == 200
+        # Everything else from another site is still refused.
+        assert client.post("/mcp", json={}, headers=navigate).status_code == 403  # cross-site form POST
+        assert client.get("/api/handoffs", headers={**navigate, "sec-fetch-mode": "cors", "sec-fetch-dest": "empty"}).status_code == 403
+        assert client.get("/api/handoffs", headers={**navigate, "sec-fetch-dest": "iframe"}).status_code == 403
+        assert client.get("/api/handoffs", headers={"sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors",
+                                                    "sec-fetch-dest": "image"}).status_code == 403
+
+
 def test_cross_site_browser_requests_are_rejected(tmp_path):
     with TestClient(create_app(tmp_path), base_url="https://handoff.example-tailnet.ts.net") as client:
         headers = {"sec-fetch-site": "cross-site"}
