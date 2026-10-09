@@ -62,7 +62,7 @@ def test_cross_site_browser_requests_are_rejected(tmp_path):
 def test_all_details_and_events_are_read_only(tmp_path, record):
     import uuid
     app = create_app(tmp_path)
-    saved = app.state.store.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": record})["data"]
+    saved = app.state.store.execute("baton_save", {"operation_id": str(uuid.uuid4()), "record": record})["data"]
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         detail = client.get("/api/handoffs/" + saved["id"]).json()["data"]
         assert detail["record"]["context"]["constraints"] == record["context"]["constraints"]

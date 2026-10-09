@@ -74,7 +74,7 @@ Open the dashboard at the same origin, then ask your harness:
 
 An empty successful result is valid. Confirm discovery of all eleven tools. To save context, say:
 
-> Upload a handoff so I can continue this conversation later.
+> Save a handoff so I can continue this conversation later.
 
 ## Updates and troubleshooting
 

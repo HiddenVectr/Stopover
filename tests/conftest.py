@@ -30,7 +30,7 @@ def push(store, record):
     def run(**changes):
         data = copy.deepcopy(record)
         data.update(changes)
-        result = store.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": data})
+        result = store.execute("baton_save", {"operation_id": str(uuid.uuid4()), "record": data})
         assert result["ok"], result
         return result["data"]
     return run

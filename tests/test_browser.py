@@ -13,7 +13,7 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
     args["record"]["title"] = "Carry the release checklist into Claude Code"
     args["record"]["context"]["background"] = '<img src=x onerror="window.handoffInjected=true">'
     args["record"]["context"]["facts"] = [{"text": "The adapter was checked locally.", "basis": "observed", "evidence_ids": []}]
-    saved = asyncio.run(call_remote(live_server["url"] + "/mcp", "baton_push", args))
+    saved = asyncio.run(call_remote(live_server["url"] + "/mcp", "baton_save", args))
     handoff_id = saved["data"]["id"]
     screenshots = Path(os.environ.get("BATON_SCREENSHOT_DIR", "/tmp/handoff-screenshots"))
     screenshots.mkdir(parents=True, exist_ok=True)
@@ -147,7 +147,7 @@ def test_dashboard_signs_in_when_the_server_requires_a_token(tmp_path, record):
         return RequestContext(actor="alice") if request.headers.get("authorization") == "Bearer good-token" else None
 
     app = create_app(tmp_path, auth=auth)
-    app.state.service.execute("baton_push", {"record": record})
+    app.state.service.execute("baton_save", {"record": record})
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -226,7 +226,7 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
     app = create_app(tmp_path, auth=auth, login_url="/fake-login", extra_routes=[
         Route("/fake-login", login), Route("/fake-login/complete", complete),
         Route("/fake-logout", logout, methods=["POST"]), Route("/api/session", session)])
-    saved = app.state.service.execute("baton_push", {"record": record})["data"]
+    saved = app.state.service.execute("baton_save", {"record": record})["data"]
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]

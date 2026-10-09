@@ -67,7 +67,7 @@ def test_auth_hook_scopes_requests_and_records_actor(tmp_path, record):
         assert client.get("/api/whoami").status_code == 401
         token = {"authorization": "Bearer secret"}
         assert client.get("/api/whoami", headers=token).json() == {"actor": "alice"}
-        pushed = mcp_call(client, "baton_push", {"record": record}, **token).json()["result"]["structuredContent"]
+        pushed = mcp_call(client, "baton_save", {"record": record}, **token).json()["result"]["structuredContent"]
         assert pushed["ok"], pushed
         events = client.get(f"/api/handoffs/{pushed['data']['id']}/events", headers=token).json()["items"]
         assert events[0]["details"]["actor"] == "alice"

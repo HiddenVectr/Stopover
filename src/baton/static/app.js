@@ -26,6 +26,21 @@ function relative(value) {
   return minutes < 1 ? 'Just now' : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 function badge(status) { return el('span', `badge ${status}`, labels[status] || status); }
+const narrow = () => matchMedia('(max-width: 900px)').matches;
+const sentence = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+// "Saved 5m ago", "Saved just now", "Saved Oct 3".
+const since = (value) => relative(value).replace(/^Just now$/, 'just now');
+// Phones show one pane at a time (the list, or a detail with a Back button); wider screens show both.
+function syncPanes() {
+  document.body.classList.toggle('detail-open', !memories.active && Boolean(state.selected));
+  document.body.classList.toggle('memory-open', memories.active && Boolean(memories.selected));
+}
+function backButton(label, callback) {
+  const node = button('', 'back-button', callback);
+  node.append(el('span', '', '←'), el('span', '', label));
+  node.setAttribute('aria-label', 'Back to ' + label.toLowerCase());
+  return node;
+}
 
 async function copy(text) {
   try {
@@ -105,7 +120,7 @@ async function overview() {
   $('summary-total').textContent = data.total;
   for (const name of ['available', 'claimed', 'completed']) $('count-' + name).textContent = data.counts[name];
   options('project-filter', data.projects, 'All projects');
-  options('target-filter', data.targets, 'All receiving agents');
+  options('target-filter', data.targets, 'Any recipient');
 }
 
 function renderList() {
@@ -113,7 +128,7 @@ function renderList() {
   container.replaceChildren();
   if (!state.items.length) {
     const empty = el('div', 'empty-list');
-    empty.append(el('strong', '', 'No handoffs here yet.'), el('p', '', 'Ask your AI harness to upload a handoff. Its context will appear here, ready for the next session.'), button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
+    empty.append(el('strong', '', 'No handoffs here yet.'), el('p', '', 'Ask your AI agent to save a handoff. Its context will appear here, ready for the next session.'), button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
     container.append(empty);
   }
   for (const item of state.items) {
@@ -123,11 +138,12 @@ function renderList() {
     const when = el('time', '', relative(item.created_at));
     when.dateTime = item.created_at;
     when.title = date(item.created_at);
-    top.append(badge(item.effective_status), when);
+    top.append(el('span', 'row-title', item.title), when);
     const bottom = el('div', 'row-bottom');
+    bottom.append(badge(item.effective_status));
     if (item.project_key) bottom.append(el('span', 'project-tag', item.project_key));
-    bottom.append(el('span', 'agent-route', `${item.source_client} → ${item.target_client || 'Any agent'}`));
-    row.append(top, el('div', 'row-title', item.title), el('div', 'row-preview', item.preview), bottom);
+    bottom.append(el('span', 'agent-route', `${item.source_client} → ${item.target_client || 'any agent'}`));
+    row.append(top, el('div', 'row-preview', item.preview), bottom);
     container.append(row);
   }
   $('load-more').hidden = !state.cursor;
@@ -192,17 +208,23 @@ function renderDetail(data) {
   const record = data.record;
   const context = record.context;
   const header = el('header', 'detail-header');
-  const eyebrow = el('div', 'eyebrow', 'HANDOFF BRIEF');
-  eyebrow.append(badge(data.effective_status));
+  header.append(backButton(labels[state.status], closeDetail));
+  const status = el('div', 'detail-status');
+  const saved = el('time', '', 'Saved ' + since(data.created_at));
+  saved.dateTime = data.created_at;
+  saved.title = date(data.created_at);
+  status.append(badge(data.effective_status), saved);
+  const route = el('p', 'detail-route');
+  route.append(el('strong', '', record.source.client), el('span', '', ' → '), el('strong', '', record.target_client || 'any agent'));
+  if (record.project_key) route.append(el('span', 'project-tag', record.project_key));
+  const actions = el('div', 'detail-actions');
+  actions.append(button('Copy resume prompt', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))));
   const id = el('div', 'id-row');
   id.append(el('code', '', data.id), button('Copy ID', 'copy-small', () => copy(data.id)));
-  const actions = el('div', 'detail-actions');
-  actions.append(button('Copy resume prompt ↗', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))));
-  header.append(eyebrow, el('h2', '', record.title), id, actions);
-  const metadata = el('dl', 'metadata');
-  const fields = [['FROM', record.source.client], ['TO', record.target_client || 'Any agent'], ['PROJECT', record.project_key || 'No project'], ['CREATED', date(data.created_at)], ['LAST UPDATED', date(data.updated_at)], ['REVISION', data.revision]];
-  if (data.claim.holder_label) fields.push(['CLAIM HOLDER', data.claim.holder_label], ['CLAIM EXPIRES', date(data.claim.expires_at) + (data.claim.active ? '' : ' (inactive)')]);
-  for (const [key, value] of fields) { const pair = el('div'); pair.append(el('dt', '', key), el('dd', '', value)); metadata.append(pair); }
+  header.append(status, el('h2', '', record.title), route, actions, id);
+  if (data.claim.holder_label && data.claim.active) {
+    header.append(el('p', 'claim-note', `In progress with ${data.claim.holder_label} until ${date(data.claim.expires_at)}.`));
+  }
   const content = el('div', 'detail-content');
   if (data.completion) {
     const complete = section(content, 'Outcome');
@@ -215,14 +237,14 @@ function renderDetail(data) {
   textSection(content, 'Objective', context.objective);
   textSection(content, 'Where things stand', context.current_state);
   const next = section(content, 'Next steps');
-  const ordered = el('ol');
+  const ordered = el('ol', 'steps');
   for (const step of context.next_steps) { const li = el('li', 'next-step'); li.append(el('strong', '', step.action), el('span', 'done-when', 'Done when: ' + step.done_when)); ordered.append(li); }
   next.append(ordered);
   listSection(content, 'Definition of done', context.acceptance_criteria);
-  textSection(content, 'Background', context.background);
-  listSection(content, 'Constraints', context.constraints);
   cards(content, 'Decisions & reasons', context.decisions, (card, item) => { card.append(el('strong', '', item.decision), el('p', 'muted', item.reason)); evidence(card, item); });
   cards(content, 'What has been tried', context.attempts, (card, item) => { card.append(el('span', 'card-label', item.verification.replaceAll('_', ' ')), el('strong', '', item.action), el('p', 'muted', item.result)); evidence(card, item); });
+  textSection(content, 'Background', context.background);
+  listSection(content, 'Constraints', context.constraints);
   cards(content, 'Facts & assumptions', context.facts, (card, item) => { card.append(el('span', 'card-label', item.basis), el('p', '', item.text)); evidence(card, item); });
   listSection(content, 'Open questions', context.open_questions);
   listSection(content, 'Source resume suggestions', context.resume_instructions);
@@ -244,14 +266,19 @@ function renderDetail(data) {
   if (record.source.model) source.append(el('p', 'small muted', 'Model: ' + record.source.model));
   if (record.source.captured_at) source.append(el('p', 'small muted', 'Captured: ' + date(record.source.captured_at)));
   if (record.source.conversation_ref) source.append(el('p', 'small mono', record.source.conversation_ref));
-  if (record.parent_id) source.append(button('View parent handoff ↗', 'button secondary', () => choose(record.parent_id)));
+  if (record.parent_id) source.append(button('View parent handoff', 'button secondary', () => choose(record.parent_id)));
+  const metadata = el('dl', 'metadata');
+  const fields = [['From', record.source.client], ['To', record.target_client || 'Any agent'], ['Project', record.project_key || 'No project'], ['Created', date(data.created_at)], ['Last updated', date(data.updated_at)], ['Revision', data.revision]];
+  if (data.claim.holder_label) fields.push(['Claim holder', data.claim.holder_label], ['Claim expires', date(data.claim.expires_at) + (data.claim.active ? '' : ' (inactive)')]);
+  for (const [key, value] of fields) { const pair = el('div'); pair.append(el('dt', '', key), el('dd', '', value)); metadata.append(pair); }
+  section(content, 'Details').append(metadata);
   const activity = section(content, 'Activity');
   activity.id = 'activity';
   activity.append(el('p', 'small muted', 'Loading history…'));
   const raw = el('details', 'raw-details');
   raw.append(el('summary', '', 'Full record · schema ' + record.schema_version), el('pre', '', JSON.stringify(data, null, 2)));
   content.append(raw, el('p', 'trust-note', data.trust_notice));
-  panel.append(header, metadata, content);
+  panel.append(header, content);
   loadEvents(data.id, activity).catch((exception) => { activity.append(el('p', 'error', exception.message)); });
 }
 
@@ -286,12 +313,40 @@ async function detail(id, silent = false) {
 }
 
 function choose(id, updateURL = true) {
+  if (!state.selected) state.listScroll = scrollY;
   state.selected = id;
   state.detail = null;
   if (updateURL) history.pushState({}, '', '/handoffs/' + encodeURIComponent(id));
   renderList();
+  syncPanes();
   detail(id);
-  if (matchMedia('(max-width:620px)').matches) $('detail').scrollIntoView({ behavior: 'instant', block: 'start' });
+  if (narrow()) scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function emptyDetail() {
+  const empty = el('div', 'empty-detail');
+  const steps = el('ol', 'empty-steps');
+  for (const [title, text] of [['Save', 'In any connected agent, say “Save a handoff so I can continue later.”'],
+                               ['Resume', 'In another agent, paste the prompt it returns: “Resume Handoff <id>”.'],
+                               ['Track', 'Select a handoff here to see its objective, decisions and next steps.']]) {
+    const li = el('li');
+    li.append(el('strong', '', title), el('span', '', text));
+    steps.append(li);
+  }
+  empty.append(el('span', 'empty-icon', '⇄'), el('h2', '', 'Pick up where your last agent left off'), steps,
+               button('Show connection steps', 'button secondary', () => $('setup-dialog').showModal()));
+  return empty;
+}
+
+function closeDetail() {
+  const position = state.listScroll || 0;
+  state.selected = null;
+  state.detail = null;
+  history.pushState({}, '', '/');
+  $('detail').replaceChildren(emptyDetail());
+  renderList();
+  syncPanes();
+  if (narrow()) scrollTo({ top: position, behavior: 'instant' });
 }
 
 async function refresh() {
@@ -305,11 +360,7 @@ async function refresh() {
 }
 
 async function enter() {
-  if (!state.selected) {
-    const empty = el('div', 'empty-detail');
-    empty.append(el('span', 'empty-icon', '⇄'), el('h2', '', 'A clear place to continue.'), el('p', '', 'Select a handoff to explore its context, decisions, and next steps.'), el('span', 'small muted', 'Any compatible MCP harness'));
-    $('detail').replaceChildren(empty);
-  }
+  if (!state.selected) $('detail').replaceChildren(emptyDetail());
   await refresh();
 }
 
@@ -319,6 +370,7 @@ for (const item of document.querySelectorAll('[data-status]')) item.addEventList
   state.status = item.dataset.status;
   for (const other of document.querySelectorAll('[data-status]')) other.classList.toggle('active', other === item);
   $('page-title').textContent = labels[state.status];
+  revealActiveChip();
   loadList();
 });
 $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadList(), 250); });
@@ -409,6 +461,11 @@ function showMemoryView(active) {
   $('memory-view').hidden = !active;
   $('memories-button').classList.toggle('active', active);
   for (const item of document.querySelectorAll('[data-status]')) item.classList.toggle('active', !active && item.dataset.status === state.status);
+  revealActiveChip();
+}
+
+function revealActiveChip() {
+  if (narrow()) document.querySelector('.nav-item.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 function renderMemories() {
@@ -424,8 +481,10 @@ function renderMemories() {
     const row = button('', 'handoff-row memory-row' + (item.key === memories.selected ? ' selected' : ''), () => chooseMemory(item.key));
     row.setAttribute('aria-pressed', String(item.key === memories.selected));
     const top = el('div', 'row-top');
-    top.append(el('span', 'badge', item.category.replaceAll('_', ' ')), el('time', '', relative(item.updated_at)));
-    row.append(top, el('div', 'row-title', item.key), el('div', 'row-preview', item.content), el('div', 'row-bottom', `${item.source.client} · ${item.basis}`));
+    top.append(el('span', 'row-title mono-title', item.key), el('time', '', relative(item.updated_at)));
+    const bottom = el('div', 'row-bottom');
+    bottom.append(el('span', 'badge', sentence(item.category.replaceAll('_', ' '))), el('span', 'agent-route', `${item.source.client} · ${item.basis}`));
+    row.append(top, el('div', 'row-preview', item.content), bottom);
     list.append(row);
   }
   $('memory-more').hidden = !memories.cursor;
@@ -455,13 +514,19 @@ function renderMemoryDetail(item) {
   const panel = $('memory-detail');
   panel.replaceChildren();
   const header = el('header', 'detail-header');
-  header.append(el('div', 'eyebrow', item.deleted ? 'FORGOTTEN MEMORY' : 'PERSONAL MEMORY'), el('h2', '', item.key));
-  if (!item.deleted) header.append(button('Copy memory', 'button secondary', () => copy(item.content)));
+  const status = el('div', 'detail-status');
+  status.append(el('span', 'badge' + (item.deleted ? ' completed' : ''), item.deleted ? 'FORGOTTEN MEMORY' : sentence(item.category.replaceAll('_', ' '))), el('time', '', 'Updated ' + since(item.updated_at)));
+  header.append(backButton('Memories', closeMemory), status, el('h2', 'mono-title', item.key));
+  if (!item.deleted) {
+    header.append(el('p', 'memory-content', item.content));
+    const actions = el('div', 'detail-actions');
+    actions.append(button('Copy memory', 'button secondary', () => copy(item.content)));
+    header.append(actions);
+  }
   const content = el('div', 'detail-content');
   if (item.deleted) {
     textSection(content, 'Forgotten', 'This memory was removed from Baton. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
   } else {
-    textSection(content, 'Memory', item.content);
     textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
     textSection(content, 'Original source', item.source.client);
     if (item.source.model) textSection(content, 'Source model', item.source.model);
@@ -496,13 +561,33 @@ async function memoryDetail(key) {
 }
 
 function chooseMemory(key, updateURL = true) {
+  if (!memories.selected) memories.listScroll = scrollY;
   memories.selected = key;
   memories.detail = null;
   if (updateURL) history.pushState({}, '', '/memories/' + encodeURIComponent(key));
   renderMemories();
   $('memory-detail').replaceChildren(el('div', 'empty-detail', 'Loading memory…'));
+  syncPanes();
   memoryDetail(key);
-  if (matchMedia('(max-width:620px)').matches) $('memory-detail').scrollIntoView({ behavior: 'instant', block: 'start' });
+  if (narrow()) scrollTo({ top: 0, behavior: 'instant' });
+}
+
+function emptyMemory() {
+  const empty = el('div', 'empty-detail');
+  empty.append(el('span', 'empty-icon', '◎'), el('h2', '', 'Personal context, in one place'),
+               el('p', '', 'Select a memory to see its source and latest update. To add or correct memories, tell any agent “update my Baton memory”.'));
+  return empty;
+}
+
+function closeMemory() {
+  const position = memories.listScroll || 0;
+  memories.selected = null;
+  memories.detail = null;
+  history.pushState({}, '', '/memories');
+  $('memory-detail').replaceChildren(emptyMemory());
+  renderMemories();
+  syncPanes();
+  if (narrow()) scrollTo({ top: position, behavior: 'instant' });
 }
 
 async function refreshMemories() {
@@ -521,11 +606,13 @@ function route() {
   if (active) {
     memories.selected = location.pathname.split('/')[2] || null;
     memories.detail = null;
-    $('memory-detail').replaceChildren(el('div', 'empty-detail', memories.selected ? 'Loading memory…' : 'Select a memory to see its source and latest update.'));
+    $('memory-detail').replaceChildren(memories.selected ? el('div', 'empty-detail', 'Loading memory…') : emptyMemory());
+    syncPanes();
     refreshMemories();
   } else {
     state.selected = location.pathname.split('/')[2] || null;
     state.detail = null;
+    syncPanes();
     enter().catch((exception) => error(exception.message));
   }
 }

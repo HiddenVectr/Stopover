@@ -154,7 +154,7 @@ mcp_servers:
     url: "http://127.0.0.1:8765/mcp"
 ```
 
-Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_push`. Ask it to list handoffs to verify a tool call, then try the [upload and resume workflow](../README.md#quickstart).
+Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_save`. Ask it to list handoffs to verify a tool call, then try the [save and resume workflow](../README.md#quickstart).
 
 References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
 
@@ -188,13 +188,13 @@ Add a server named `baton`, select **Streamable HTTP**, enter `http://127.0.0.1:
 
 ## Verify a connection
 
-The client should discover eleven tools: the seven task tools `baton_push`, `baton_list`, `baton_get`, `baton_claim`, `baton_resume`, `baton_complete`, and `baton_delete`, plus `baton_memory_read`, `baton_memory_update`, `baton_memory_forget`, and `baton_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
+The client should discover eleven tools: the seven task tools `baton_save`, `baton_list`, `baton_get`, `baton_claim`, `baton_resume`, `baton_complete`, and `baton_delete`, plus `baton_memory_read`, `baton_memory_update`, `baton_memory_forget`, and `baton_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
 
 Ask the agent:
 
 > Use Baton's baton_list with status="all" and limit=5. Report whether the call succeeds. Do not create or claim a handoff.
 
-An empty successful result is fine. A configured-server listing alone does not prove that tool calls work. After this read-only check, upload a handoff in one client and resume it in another to test a transfer.
+An empty successful result is fine. A configured-server listing alone does not prove that tool calls work. After this read-only check, save a handoff in one client and resume it in another to test a transfer.
 
 ## Troubleshooting connections
 

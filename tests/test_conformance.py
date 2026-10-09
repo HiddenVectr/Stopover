@@ -30,8 +30,8 @@ def test_events_are_emitted_after_commit(tmp_path, record):
     try:
         ctx = RequestContext(actor="alice")
         op = str(uuid.uuid4())
-        saved = service.execute("baton_push", {"operation_id": op, "record": record}, ctx)["data"]
-        service.execute("baton_push", {"operation_id": op, "record": record}, ctx)  # replay: no event
+        saved = service.execute("baton_save", {"operation_id": op, "record": record}, ctx)["data"]
+        service.execute("baton_save", {"operation_id": op, "record": record}, ctx)  # replay: no event
         token = service.execute("baton_claim", {"id": saved["id"], "holder_label": "codex"}, ctx)["data"]["claim_token"]
         service.execute("baton_claim", {"id": saved["id"], "action": "release", "claim_token": token}, ctx)
         service.execute("baton_delete", {"id": saved["id"]}, ctx)
@@ -53,9 +53,9 @@ def test_failed_transactions_and_handler_errors_do_not_leak(tmp_path, record):
         raise RuntimeError("webhook down")
     service = BatonService(SQLiteBackend(tmp_path), on_event=handler)
     try:
-        assert service.execute("baton_push", {"record": record})["ok"]  # handler error is logged, not raised
+        assert service.execute("baton_save", {"record": record})["ok"]  # handler error is logged, not raised
         record["parent_id"] = str(uuid.uuid4())
-        assert service.execute("baton_push", {"record": record})["error"]["code"] == "NOT_FOUND"
+        assert service.execute("baton_save", {"record": record})["error"]["code"] == "NOT_FOUND"
         assert [event["type"] for event in seen] == ["handoff.pushed"]
     finally:
         service.close()
@@ -65,8 +65,8 @@ def test_policy_can_vary_by_workspace(tmp_path, record):
     service = BatonService(SQLiteBackend(tmp_path), policy=lambda ctx: Policy(max_handoffs=1 if ctx.actor == "free" else 100))
     try:
         free, pro = RequestContext(actor="free"), RequestContext(actor="pro")
-        assert service.execute("baton_push", {"record": record}, free)["ok"]
-        assert service.execute("baton_push", {"record": record}, free)["error"]["code"] == "STORE_FULL"
-        assert service.execute("baton_push", {"record": record}, pro)["ok"]
+        assert service.execute("baton_save", {"record": record}, free)["ok"]
+        assert service.execute("baton_save", {"record": record}, free)["error"]["code"] == "STORE_FULL"
+        assert service.execute("baton_save", {"record": record}, pro)["ok"]
     finally:
         service.close()

@@ -17,9 +17,9 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
             async with ClientSession(read, write) as source:
                 await source.initialize()
                 tools = (await source.list_tools()).tools
-                assert {tool.name for tool in tools} == {"baton_push", "baton_list", "baton_get", "baton_claim", "baton_resume", "baton_complete", "baton_delete", "baton_memory_read", "baton_memory_update", "baton_memory_forget", "baton_memory_export"}
+                assert {tool.name for tool in tools} == {"baton_save", "baton_list", "baton_get", "baton_claim", "baton_resume", "baton_complete", "baton_delete", "baton_memory_read", "baton_memory_update", "baton_memory_forget", "baton_memory_export"}
                 args = {"operation_id": str(uuid.uuid4()), "record": record}
-                pushed = await source.call_tool("baton_push", args)
+                pushed = await source.call_tool("baton_save", args)
                 assert not pushed.isError, pushed
                 handoff_id = pushed.structuredContent["data"]["id"]
                 params = StdioServerParameters(command=sys.executable,
@@ -44,16 +44,16 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
                                 "acceptance_results": [{"criterion": item, "result": "pass", "evidence": "Compared the returned context in a fresh MCP session"} for item in record["context"]["acceptance_criteria"]]}})
                         assert not result.isError, result
                         reverse_record = {**record, "source": {"client": "claude-code"}, "target_client": "codex", "parent_id": handoff_id}
-                        reverse = await recipient.call_tool("baton_push", {"operation_id": str(uuid.uuid4()), "record": reverse_record})
+                        reverse = await recipient.call_tool("baton_save", {"operation_id": str(uuid.uuid4()), "record": reverse_record})
                         assert not reverse.isError
                         reverse_id = reverse.structuredContent["data"]["id"]
                 final = await source.call_tool("baton_get", {"id": handoff_id})
                 assert final.structuredContent["data"]["status"] == "completed"
                 reverse = await source.call_tool("baton_get", {"id": reverse_id})
                 assert reverse.structuredContent["data"]["record"]["source"]["client"] == "claude-code"
-                replay = await source.call_tool("baton_push", args)
+                replay = await source.call_tool("baton_save", args)
                 assert replay.structuredContent["replayed"]
-                bad = await source.call_tool("baton_push", {"operation_id": "invalid", "record": record})
+                bad = await source.call_tool("baton_save", {"operation_id": "invalid", "record": record})
                 assert bad.isError and bad.structuredContent["error"]["code"] == "VALIDATION_ERROR"
 
 
@@ -63,7 +63,7 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
     ("desktop.example-tailnet.ts.net:8445", "https://other.example.com"),
     ("localhost:8765", "null"),
 ])
-async def test_remote_mcp_headers_support_upload_and_read(live_server, record, host, origin):
+async def test_remote_mcp_headers_support_save_and_read(live_server, record, host, origin):
     # Model a reverse proxy forwarding the original Host and Origin to loopback.
     headers = {"host": host}
     if origin is not None:
@@ -73,7 +73,7 @@ async def test_remote_mcp_headers_support_upload_and_read(live_server, record, h
             async with ClientSession(read, write) as client:
                 await client.initialize()
                 assert len((await client.list_tools()).tools) == 11
-                pushed = await client.call_tool("baton_push", {"operation_id": str(uuid.uuid4()), "record": record})
+                pushed = await client.call_tool("baton_save", {"operation_id": str(uuid.uuid4()), "record": record})
                 assert not pushed.isError, pushed
                 handoff_id = pushed.structuredContent["data"]["id"]
                 fetched = await client.call_tool("baton_get", {"id": handoff_id})
@@ -90,11 +90,11 @@ async def test_prompts_over_http(live_server, record):
                 await client.initialize()
                 save = await client.get_prompt("save", {"target": "codex", "focus": "the failing test"})
                 text = save.messages[0].content.text
-                assert "baton_push" in text and "codex" in text and "the failing test" in text
+                assert "baton_save" in text and "codex" in text and "the failing test" in text
                 assert "baton_list" in (await client.get_prompt("inbox")).messages[0].content.text
                 with pytest.raises(Exception, match="not found"):
                     await client.get_prompt("resume", {"id": str(uuid.uuid4())})
-                pushed = (await client.call_tool("baton_push", {"record": record})).structuredContent["data"]
+                pushed = (await client.call_tool("baton_save", {"record": record})).structuredContent["data"]
                 resumed = await client.call_tool("baton_resume", {"id": pushed["id"], "holder_label": "codex"})
                 assert not resumed.isError, resumed
                 busy = await client.get_prompt("resume", {"id": pushed["id"]})

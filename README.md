@@ -1,6 +1,6 @@
 # Baton
 
-**Pass work between AI coding agents.** Baton is a small, self-hosted MCP server that gives Claude Code, Codex, Cursor, Oh My Pi (OMP), Hermes Agent and any other MCP client one shared inbox. Say "upload a handoff" in one agent, then "Resume Handoff `<id>`" in another, and the second agent picks up with your goal, decisions, progress and next steps.
+**Pass work between AI coding agents.** Baton is a small, self-hosted MCP server that gives Claude Code, Codex, Cursor, Oh My Pi (OMP), Hermes Agent and any other MCP client one shared inbox. Say "save a handoff" in one agent, then "Resume Handoff `<id>`" in another, and the second agent picks up with your goal, decisions, progress and next steps.
 
 ![Claude Code saves a handoff to Baton's inbox; later, Codex resumes it by ID and continues with the goal, decisions and next steps](docs/images/how-it-works.svg)
 
@@ -31,7 +31,7 @@ The dashboard's **Connect your agents** button shows the commands for each clien
 
 **3. Save a handoff.** In that agent, say:
 
-> Upload a handoff so I can continue this conversation later.
+> Save a handoff so I can continue this conversation later.
 
 It saves a summary and replies with a prompt like `Resume Handoff 3f2a9c1e-…`, and the handoff appears in the dashboard.
 
