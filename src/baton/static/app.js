@@ -387,6 +387,9 @@ function updateAuthUI() {
   // Token instructions apply when the dashboard itself uses a token, or the host issues access tokens.
   const signedIn = Boolean(accessToken()) || sameOriginPath(session?.access_token_url);
   $('signout-button').hidden = !accessToken() && !session?.logout_url;
+  // Small screens move account links and Sign out behind an account button in the top bar.
+  document.body.classList.toggle('has-account', !$('signout-button').hidden || !$('host-links').hidden);
+  $('account-button').textContent = $('workspace-avatar').textContent;
   $('setup-token-link').hidden = !sameOriginPath(session?.access_token_url);
   if (sameOriginPath(session?.access_token_url)) $('setup-token-anchor').href = session.access_token_url;
   // Show a placeholder rather than the real token so it never appears in screenshots or screen shares.
@@ -443,6 +446,21 @@ async function loadSession() {
 loadSession();
 $('copy-mcp-url').addEventListener('click', () => copy(mcpUrl));
 $('setup-button').addEventListener('click', () => $('setup-dialog').showModal());
+
+function openAccount() {
+  $('account-avatar').textContent = $('workspace-avatar').textContent;
+  $('account-name').textContent = $('workspace-name').textContent;
+  $('account-detail').textContent = $('workspace-detail').textContent;
+  const links = [...$('host-links').querySelectorAll('a')].map((link) => { const a = el('a', 'account-link', link.textContent); a.href = link.getAttribute('href'); return a; });
+  const items = [...links];
+  if (!$('signout-button').hidden) items.push(button('Sign out', 'account-link signout', () => { $('account-dialog').close(); $('signout-button').click(); }));
+  $('account-links').replaceChildren(...items);
+  $('account-dialog').showModal();
+}
+$('account-button').addEventListener('click', openAccount);
+$('close-account').addEventListener('click', () => $('account-dialog').close());
+// Tapping the backdrop closes the sheet.
+$('account-dialog').addEventListener('click', (event) => { if (event.target === $('account-dialog')) $('account-dialog').close(); });
 $('close-setup').addEventListener('click', () => $('setup-dialog').close());
 $('close-copy').addEventListener('click', () => $('copy-dialog').close());
 
