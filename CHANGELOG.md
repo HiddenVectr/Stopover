@@ -3,6 +3,11 @@
 All notable changes to Baton. Versions follow [semantic versioning](https://semver.org/); the extension API
 (`Backend`, `RequestContext`, the registry and `create_app` hooks) only changes incompatibly in a major release.
 
+## 0.11.0 — 2026-10-09
+
+- **Hosting:** `create_app(mcp_challenge=...)` sets the `WWW-Authenticate` value for unauthenticated `/mcp` requests, so a host can point MCP clients at its OAuth metadata (MCP authorization spec, RFC 9728).
+- **Dashboard:** when the host's `/api/session` reports `"mcp_sign_in": true`, **Connect your agents** tells people to add the URL and sign in through the browser, with no token in the commands; creating an access token becomes the fallback.
+
 ## 0.10.1 — 2026-10-09
 
 - Dashboard on phones and small tablets: host account links (such as Access tokens) and **Sign out** move behind an account button in the top bar, which opens a bottom sheet. They no longer sit in a loose row under the status chips. Desktop is unchanged.

@@ -384,20 +384,27 @@ function sameOriginPath(url) {
 }
 
 function updateAuthUI() {
-  // Token instructions apply when the dashboard itself uses a token, or the host issues access tokens.
-  const signedIn = Boolean(accessToken()) || sameOriginPath(session?.access_token_url);
+  // Hosts with MCP OAuth (session.mcp_sign_in): agents sign in through the browser, so no token goes in the command.
+  const oauth = Boolean(session?.mcp_sign_in);
+  // Token instructions apply when the dashboard itself uses a token, or the host issues access tokens without OAuth.
+  const signedIn = !oauth && (Boolean(accessToken()) || sameOriginPath(session?.access_token_url));
   $('signout-button').hidden = !accessToken() && !session?.logout_url;
   // Small screens move account links and Sign out behind an account button in the top bar.
   document.body.classList.toggle('has-account', !$('signout-button').hidden || !$('host-links').hidden);
   $('account-button').textContent = $('workspace-avatar').textContent;
   $('setup-token-link').hidden = !sameOriginPath(session?.access_token_url);
   if (sameOriginPath(session?.access_token_url)) $('setup-token-anchor').href = session.access_token_url;
+  $('setup-token-anchor').textContent = oauth ? 'Or create an access token' : 'Create an access token';
+  $('setup-token-anchor').className = oauth ? 'button secondary' : 'button primary';
   // Show a placeholder rather than the real token so it never appears in screenshots or screen shares.
-  $('codex-add').textContent = signedIn ? `export BATON_TOKEN=YOUR_TOKEN\ncodex mcp add baton --url ${mcpUrl} --bearer-token-env-var BATON_TOKEN` : `codex mcp add baton --url ${mcpUrl}`;
+  $('codex-add').textContent = oauth ? `codex mcp add baton --url ${mcpUrl}\ncodex mcp login baton`
+    : signedIn ? `export BATON_TOKEN=YOUR_TOKEN\ncodex mcp add baton --url ${mcpUrl} --bearer-token-env-var BATON_TOKEN` : `codex mcp add baton --url ${mcpUrl}`;
   $('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
-  $('setup-intro').textContent = signedIn ? 'Add this Streamable HTTP MCP server to your harness. Requests need your access token (replace YOUR_TOKEN).'
+  $('setup-intro').textContent = oauth ? 'Add this MCP server to your agent. The first time it connects, it opens your browser to sign in; there is no token to copy. In Claude Code, run /mcp and choose Authenticate if it asks.'
+    : signedIn ? 'Add this Streamable HTTP MCP server to your harness. Requests need your access token (replace YOUR_TOKEN).'
     : 'Add this Streamable HTTP MCP server to your harness. No token or login is needed.';
-  $('setup-auth').textContent = signedIn ? 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and the header Authorization: Bearer YOUR_TOKEN.'
+  $('setup-auth').textContent = oauth ? 'In Cursor, OMP, Hermes Agent, or another client that supports MCP sign-in, add an HTTP server with the URL above. For clients without sign-in, create an access token and send it as Authorization: Bearer.'
+    : signedIn ? 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and the header Authorization: Bearer YOUR_TOKEN.'
     : 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None.';
 }
 updateAuthUI();
