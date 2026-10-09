@@ -17,6 +17,7 @@
       <div class="sidebar-top">
         <a href="/" class="brand"><span class="brand-icon" aria-hidden="true">⇄</span>Baton</a>
         <button id="setup-button" class="button primary connect-button" type="button">Connect your agents</button>
+        <button id="account-button" class="account-button" type="button" aria-label="Account" aria-haspopup="dialog"></button>
       </div>
       <div class="workspace">
         <span class="workspace-avatar" id="workspace-avatar">L</span>
@@ -103,6 +104,13 @@
     <pre id="claude-add"></pre>
     <p class="small muted"><span id="setup-auth">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None.</span></p>
     <p class="small muted">Open a fresh agent session, then ask it to save a handoff or “update my Baton memory”. To retrieve personal memories in another harness, say “import my Baton memory”.</p>
+  </dialog>
+  <dialog id="account-dialog" class="sheet" aria-labelledby="account-name">
+    <div class="dialog-heading">
+      <div class="account-identity"><span id="account-avatar" class="workspace-avatar"></span><div><strong id="account-name"></strong><span id="account-detail"></span></div></div>
+      <button id="close-account" class="icon-button" aria-label="Close account menu">×</button>
+    </div>
+    <nav id="account-links" class="account-links" aria-label="Account links"></nav>
   </dialog>
   <dialog id="copy-dialog">
     <div class="dialog-heading"><h2>Copy this text</h2><button id="close-copy" class="icon-button" aria-label="Close copy text">×</button></div>

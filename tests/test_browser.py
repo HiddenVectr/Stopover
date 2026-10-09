@@ -253,6 +253,18 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
             # Host links: same-origin only.
             expect(page.locator("#host-links a")).to_have_count(1)
             expect(page.get_by_role("link", name="Access tokens")).to_have_attribute("href", "/settings/tokens")
+            # Phones: account links and Sign out sit behind the account button, not in the top bar.
+            page.set_viewport_size({"width": 390, "height": 844})
+            expect(page.locator("#host-links")).to_be_hidden()
+            page.get_by_role("button", name="Account").click()
+            sheet = page.locator("#account-dialog")
+            expect(sheet).to_contain_text("Alice's workspace")
+            expect(sheet.get_by_role("link", name="Access tokens")).to_have_attribute("href", "/settings/tokens")
+            expect(sheet.get_by_role("button", name="Sign out")).to_be_visible()
+            page.get_by_role("button", name="Close account menu").click()
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            page.set_viewport_size({"width": 1280, "height": 900})
+            expect(page.get_by_role("button", name="Account")).to_be_hidden()
             # The setup dialog tells the user to create a token rather than "no token needed".
             page.get_by_role("button", name="Connect your agents").first.click()
             expect(page.locator("#claude-add")).to_contain_text('--header "Authorization: Bearer YOUR_TOKEN"')

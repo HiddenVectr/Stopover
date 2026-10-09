@@ -3,6 +3,10 @@
 All notable changes to Baton. Versions follow [semantic versioning](https://semver.org/); the extension API
 (`Backend`, `RequestContext`, the registry and `create_app` hooks) only changes incompatibly in a major release.
 
+## 0.10.1 — 2026-10-09
+
+- Dashboard on phones and small tablets: host account links (such as Access tokens) and **Sign out** move behind an account button in the top bar, which opens a bottom sheet. They no longer sit in a loose row under the status chips. Desktop is unchanged.
+
 ## 0.10.0 — 2026-10-09
 
 - **Breaking: `baton_push` is now `baton_save`.** One verb everywhere: you *save* a handoff and *resume* it. Update anything that calls the tool by name (scripts, custom prompts, allowlists such as Claude Code's `mcp__baton__baton_push` permission). Agents pick up the new name automatically from the server. Saves made through the old name aren't recognised as retries of `baton_save`.
