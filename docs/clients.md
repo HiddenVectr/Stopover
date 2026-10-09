@@ -1,6 +1,10 @@
 # Connect an AI harness
 
-Baton works with any MCP client that supports **Streamable HTTP**. This page has setup steps for each tested client, how to verify the connection, and troubleshooting.
+Baton works with any MCP client that supports **Streamable HTTP**. This page has setup steps for each client, how to verify the connection, and troubleshooting.
+
+**Quickest route:** open the dashboard and click **Connect your agents**. It shows the MCP URL and ready-to-paste commands with your server's address filled in.
+
+![The Connect your agents dialog with the MCP URL and commands for Codex and Claude Code](images/connect-dialog.png)
 
 Every client uses the same connection details:
 
@@ -13,10 +17,9 @@ Every client uses the same connection details:
 
 For Tailscale hosting, replace `http://127.0.0.1:8765/mcp` in any example below with your Serve HTTPS URL plus `/mcp`. The machine or runtime making the MCP request must be able to reach your tailnet. Docker and Python are needed only on the Baton server, not on clients.
 
-
 For a server on another machine, see [Tailscale deployment](remote-http.md).
 
-Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), [Hermes Agent](#hermes-agent), or [generic MCP client](#generic-mcp-client).
+Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), [Hermes Agent](#hermes-agent), [Muse Code (Meta)](#muse-code-meta), or [generic MCP client](#generic-mcp-client).
 
 For localhost or Tailscale, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Baton registrations.
 
@@ -154,6 +157,28 @@ mcp_servers:
 Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_push`. Ask it to list handoffs to verify a tool call, then try the [upload and resume workflow](../README.md#quickstart).
 
 References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
+
+## Muse Code (Meta)
+
+Muse Code, Meta's coding agent, reads MCP servers from the `mcp_servers` block of `~/.config/muse/settings.json`. Merge [clients/muse-code.json](../clients/muse-code.json) into it:
+
+```json
+{
+  "mcp_servers": {
+    "baton": {
+      "transport": "streamable_http",
+      "url": "http://127.0.0.1:8765/mcp",
+      "mode": "optional"
+    }
+  }
+}
+```
+
+`"mode": "optional"` lets Muse Code start with a warning when Baton isn't running; the default (`required`) aborts the run instead. Start a new session and run `/mcp` to check that `baton` is connected and lists its tools.
+
+The **Muse app** (not Muse Code) has no user-facing MCP setting: its connectors come from Meta's catalog, and work it runs on Meta's cloud machines can't reach `127.0.0.1` or your tailnet. A self-hosted Baton therefore works only with Muse Code on your own machine.
+
+This setup follows Meta's documented keys (`transport`, `url`, `mode`); it has not been tested end to end yet. Reference: [Muse Code: extending](https://dev.meta.ai/docs/muse-code/extending).
 
 ## Generic MCP client
 
