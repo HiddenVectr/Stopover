@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 340" width="960" height="340" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">How Baton works</title>
+  <desc id="desc">An agent such as Claude Code saves a handoff to Baton's inbox when asked to upload a handoff. Later, another agent such as Codex resumes it by ID, claiming the task and receiving the goal, decisions, progress and next steps. Personal memories are shared the same way.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#255b46"/>
+    </marker>
+  </defs>
+  <rect width="960" height="340" rx="20" fill="#f6f7f4"/>
+
+  <!-- Agent A -->
+  <rect x="24" y="70" width="210" height="180" rx="16" fill="#fff" stroke="#e0e6df"/>
+  <text x="46" y="106" font-size="12" font-weight="700" letter-spacing="1.5" fill="#718078">AGENT A</text>
+  <text x="46" y="136" font-size="22" font-weight="700" fill="#243b32">Claude Code</text>
+  <rect x="46" y="156" width="166" height="62" rx="10" fill="#eaf2e9"/>
+  <text x="58" y="182" font-size="13" fill="#243b32">“Upload a handoff so I</text>
+  <text x="58" y="202" font-size="13" fill="#243b32">can continue later.”</text>
+
+  <!-- Baton -->
+  <rect x="355" y="40" width="250" height="240" rx="18" fill="#255b46"/>
+  <rect x="377" y="64" width="34" height="34" rx="10" fill="#1b4636"/>
+  <path d="M384 76h18m-5-5 5 5-5 5M404 88h-18m5-5-5 5 5 5" fill="none" stroke="#fff" stroke-width="2.5"/>
+  <text x="423" y="89" font-size="22" font-weight="700" fill="#fff">Baton</text>
+  <text x="377" y="126" font-size="12" font-weight="700" letter-spacing="1.5" fill="#bfd4b0">SHARED MCP INBOX</text>
+  <g font-size="14" fill="#fff">
+    <rect x="377" y="140" width="206" height="34" rx="8" fill="#ffffff1f"/>
+    <text x="391" y="162">Handoff 3f2a9c1e · ready</text>
+    <rect x="377" y="182" width="206" height="34" rx="8" fill="#ffffff1f"/>
+    <text x="391" y="204">Claims: one agent at a time</text>
+    <rect x="377" y="224" width="206" height="34" rx="8" fill="#ffffff1f"/>
+    <text x="391" y="246">Personal memories</text>
+  </g>
+
+  <!-- Agent B -->
+  <rect x="726" y="70" width="210" height="180" rx="16" fill="#fff" stroke="#e0e6df"/>
+  <text x="748" y="106" font-size="12" font-weight="700" letter-spacing="1.5" fill="#718078">AGENT B, LATER</text>
+  <text x="748" y="136" font-size="22" font-weight="700" fill="#243b32">Codex</text>
+  <rect x="748" y="156" width="166" height="62" rx="10" fill="#eaf2e9"/>
+  <text x="760" y="182" font-size="13" fill="#243b32">“Resume Handoff</text>
+  <text x="760" y="202" font-size="13" fill="#243b32">3f2a9c1e”</text>
+
+  <!-- Arrows -->
+  <path d="M234 160H347" stroke="#255b46" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="290" y="148" font-size="12" text-anchor="middle" fill="#5f6e66">baton_push</text>
+  <path d="M605 160H718" stroke="#255b46" stroke-width="2.5" fill="none" marker-end="url(#arrow)"/>
+  <text x="662" y="148" font-size="12" text-anchor="middle" fill="#5f6e66">baton_resume</text>
+
+  <text x="480" y="314" font-size="14" text-anchor="middle" fill="#5f6e66">Goal, decisions and reasons, progress, dead ends and next steps travel with the task. Files and code stay where they are.</text>
+</svg>

@@ -38,6 +38,8 @@ Other clients name prompts differently; the plain-language requests above work e
 
 ## Dashboard
 
+![The dashboard: handoffs listed newest first with their status, project and agents, with filters by status, project and receiving agent](images/dashboard.png)
+
 You can also click **Copy resume prompt** on any dashboard record. The dashboard lists all handoffs with status, project and receiving-agent filters, title/project/ID search, paginated results, and 15-second refreshes. Click a record to see all context, references, metadata, outcome, raw JSON and paginated activity history.
 
 To add a single, clearly labeled welcome example:
@@ -69,6 +71,8 @@ The minimum record requires `title`, `source.client`, and `context` with `object
 For `outcome="succeeded"`, completion must report one passing result with nonempty evidence for each original acceptance criterion. Identify each criterion by `index` (0-based, in the record's order) or by its text; text matching ignores case and whitespace. A mismatch error lists the original criteria with their indexes. Use `blocked` or `abandoned` for an unfinished attempt, or release the claim to leave it available. Corrections/continuations use a new push with `parent_id`; source records are never silently rewritten.
 
 ## Personal memories
+
+![The Personal memories page: memories listed by topic key and category, with one memory's content, category, source and evidence](images/memories.png)
 
 Baton has one shared personal-memory collection, available through the same local or remote MCP URL. There are no additional credentials, accounts, or user IDs. Personal memories live alongside handoffs in the existing data volume, but do not use task claims or completion and are not removed by handoff retention.
 

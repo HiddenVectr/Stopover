@@ -55,4 +55,4 @@ The existing dashboard adds a Personal memories view with full-text display, top
 
 All tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and allowed remote Host/Origin headers over real MCP HTTP connections, with initialization, tool discovery, upload and retrieval. Unknown hosts are rejected on every route, and the allowlist can be extended or disabled. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
 
-Dashboard screenshots: [desktop](dashboard.png), [mobile](dashboard-mobile.png).
+Dashboard screenshots: [desktop](images/dashboard.png), [mobile](images/dashboard-mobile.png). Regenerate all images with `.venv/bin/python scripts/screenshots.py`.

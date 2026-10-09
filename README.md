@@ -2,7 +2,7 @@
 
 **Pass work between AI coding agents.** Baton is a small, self-hosted MCP server that gives Claude Code, Codex, Cursor, Oh My Pi (OMP), Hermes Agent and any other MCP client one shared inbox. Say "upload a handoff" in one agent, then "Resume Handoff `<id>`" in another, and the second agent picks up with your goal, decisions, progress and next steps.
 
-![Baton dashboard listing handoffs](docs/dashboard.png)
+![Claude Code saves a handoff to Baton's inbox; later, Codex resumes it by ID and continues with the goal, decisions and next steps](docs/images/how-it-works.svg)
 
 - **One container, no accounts.** Docker runs the MCP server and a web dashboard, with SQLite in a persistent volume. Clients connect by URL; they need no Docker, Python, token or login.
 - **Safe ownership.** Agents claim a handoff before working on it, so two agents don't pick up the same task, and retries never create duplicates.
@@ -19,17 +19,25 @@ cd Baton
 docker compose up --build -d
 ```
 
-Open the dashboard at **http://127.0.0.1:8765**, then connect an agent. For Claude Code:
+**1. Open the dashboard** at **http://127.0.0.1:8765**. It's empty until your first handoff.
+
+**2. Connect an agent.** For Claude Code:
 
 ```sh
 claude mcp add --scope user --transport http baton http://127.0.0.1:8765/mcp
 ```
 
-In that agent, say:
+The dashboard's **Connect your agents** button shows the commands for each client, with your server's URL filled in. Start a fresh agent session afterwards; in Claude Code, `/mcp` should list `baton` as connected.
+
+**3. Save a handoff.** In that agent, say:
 
 > Upload a handoff so I can continue this conversation later.
 
-It saves a summary and replies with a prompt like `Resume Handoff 3f2a9c1e-…`. Paste that prompt into a fresh session of any connected agent to continue.
+It saves a summary and replies with a prompt like `Resume Handoff 3f2a9c1e-…`, and the handoff appears in the dashboard.
+
+**4. Resume it anywhere.** Paste that prompt into a fresh session of any connected agent. It claims the task and continues where the last one stopped.
+
+![The Baton dashboard: a list of handoffs with their status, project and agents, and the selected handoff's objective, current state and next steps](docs/images/handoff-detail.png)
 
 ## How it works
 
@@ -47,6 +55,8 @@ Details: [Using Baton](docs/usage.md) covers the workflows, prompts, dashboard a
 
 ## Connect your agents
 
+![The Connect your agents dialog in the dashboard, with the MCP URL and ready-to-paste commands for Codex and Claude Code](docs/images/connect-dialog.png)
+
 Every client uses the same settings: transport **Streamable HTTP**, URL **`http://127.0.0.1:8765/mcp`**, authentication **None**.
 
 | Client | Command or config |
@@ -56,6 +66,7 @@ Every client uses the same settings: transport **Streamable HTTP**, URL **`http:
 | Hermes Agent | `hermes mcp add baton --url http://127.0.0.1:8765/mcp` |
 | Cursor | Add [clients/cursor.json](clients/cursor.json) to `~/.cursor/mcp.json` |
 | OMP | Add [clients/omp.json](clients/omp.json) to `~/.omp/agent/mcp.json` |
+| Muse Code (Meta) | Add [clients/muse-code.json](clients/muse-code.json) to `~/.config/muse/settings.json` |
 | Other | Add a Streamable HTTP server named `baton` with the URL above ([example](clients/generic-http.json)) |
 
 See [Connect an AI harness](docs/clients.md) for config files, verification and troubleshooting. To use Baton from other devices, publish it on your tailnet with `tailscale serve` and use the HTTPS URL plus `/mcp`; see [Tailscale deployment](docs/remote-http.md).
@@ -99,6 +110,8 @@ Run without Docker:
 ```sh
 .venv/bin/python -m baton --data-dir ./data serve --host 127.0.0.1 --port 8765
 ```
+
+Regenerate the documentation screenshots with `.venv/bin/python scripts/screenshots.py`, which fills a throwaway server with synthetic data.
 
 Never run two servers against the same data directory. Production packages are pinned in `requirements.lock` and the Docker base image by digest. The server uses the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).
 

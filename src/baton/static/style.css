@@ -4,3 +4,4 @@
 .memory-row .row-preview{overflow-wrap:anywhere}.memory-row .row-title{font-family:ui-monospace,monospace;font-size:12px}
 
 @media(max-width:620px){.sidebar nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}.sidebar .nav-item{width:100%;margin:0}#memories-button{grid-column:1/-1}}
+#copy-mcp-url{margin-bottom:22px}
