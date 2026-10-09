@@ -116,3 +116,17 @@ def test_login_url_is_returned_for_dashboard_api_but_not_mcp(tmp_path):
     with TestClient(create_app(tmp_path, auth=deny, login_url="/auth/login"), base_url="http://127.0.0.1:8765") as client:
         assert client.get("/api/handoffs").json() == {"error": "Authentication required", "login_url": "/auth/login"}
         assert "login_url" not in mcp_call(client, "baton_list", {}).json()
+
+
+def test_mcp_challenge_points_clients_at_oauth_metadata(tmp_path):
+    async def deny(request):
+        return None
+
+    def challenge(request):
+        return f'Bearer resource_metadata="https://{request.headers["host"]}/.well-known/oauth-protected-resource/mcp"'
+
+    with TestClient(create_app(tmp_path, auth=deny, mcp_challenge=challenge), base_url="http://127.0.0.1:8765") as client:
+        response = mcp_call(client, "baton_list", {})
+        assert response.status_code == 401
+        assert response.headers["www-authenticate"] == 'Bearer resource_metadata="https://127.0.0.1:8765/.well-known/oauth-protected-resource/mcp"'
+        assert client.get("/api/handoffs").headers["www-authenticate"] == "Bearer"  # only /mcp gets the challenge

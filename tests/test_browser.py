@@ -271,6 +271,20 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
             expect(page.get_by_role("link", name="Create an access token")).to_have_attribute("href", "/settings/tokens")
             expect(page.locator("#setup-intro")).not_to_contain_text("No token")
             page.get_by_role("button", name="Close connection instructions").click()
+            # Hosts with MCP OAuth: agents sign in through the browser, so the commands carry no token.
+            def with_sign_in(route):
+                body = route.fetch().json()
+                route.fulfill(json={**body, "mcp_sign_in": True})
+            page.route("**/api/session", with_sign_in)
+            page.reload()
+            expect(page.locator("#workspace-name")).to_have_text("Alice's workspace")
+            page.get_by_role("button", name="Connect your agents").first.click()
+            expect(page.locator("#claude-add")).not_to_contain_text("Authorization")
+            expect(page.locator("#codex-add")).to_contain_text("codex mcp login baton")
+            expect(page.locator("#setup-intro")).to_contain_text("opens your browser to sign in")
+            expect(page.get_by_role("link", name="Or create an access token")).to_have_attribute("href", "/settings/tokens")
+            page.get_by_role("button", name="Close connection instructions").click()
+            page.unroute("**/api/session")
             page.get_by_role("button", name="Sign out").click()
             expect(page.get_by_role("heading", name="Host login")).to_be_visible()
             assert not errors, errors
