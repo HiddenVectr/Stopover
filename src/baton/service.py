@@ -169,7 +169,7 @@ class BatonService:
                                "created": now, "updated": now})
             self._event(tx, ctx, handoff_id, "pushed", now, 1, {"source_client": record["source"]["client"]})
             return {"id": handoff_id, "revision": 1, "status": "available", "record_sha256": sha}
-        return self._write(ctx, "handoff", "baton_push", request, now, apply)
+        return self._write(ctx, "handoff", "baton_save", request, now, apply)
 
     def get(self, request, ctx, now):
         with self.backend.transaction(ctx) as tx:
@@ -308,7 +308,7 @@ class BatonService:
 
 
 def _save_prompt(service, arguments, ctx):
-    text = "Upload a handoff with baton_push so I can continue this conversation later"
+    text = "Save a handoff with baton_save so I can continue this conversation later"
     text += f" in {arguments['target']} (set target_client to that harness)." if "target" in arguments else "."
     if "focus" in arguments:
         text += f" Emphasise: {arguments['focus']}"
@@ -333,7 +333,7 @@ def core_registry() -> Registry:
     """The tools, prompts and instructions of the open-source server."""
     registry = Registry()
     handlers = {
-        "baton_push": BatonService.push, "baton_list": BatonService.list, "baton_get": BatonService.get,
+        "baton_save": BatonService.push, "baton_list": BatonService.list, "baton_get": BatonService.get,
         "baton_claim": BatonService.claim, "baton_resume": BatonService.resume,
         "baton_complete": BatonService.complete, "baton_delete": BatonService.delete,
         "baton_memory_read": BatonService.memory_read, "baton_memory_export": BatonService.memory_export,

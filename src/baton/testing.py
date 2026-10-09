@@ -60,7 +60,7 @@ def ok(result):
 def push(service, record, **changes):
     data = copy.deepcopy(record)
     data.update(changes)
-    return ok(service.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": data}))
+    return ok(service.execute("baton_save", {"operation_id": str(uuid.uuid4()), "record": data}))
 
 
 def results_for(record, outcome="pass"):
@@ -81,13 +81,13 @@ def update(*entries, client="codex", **extra):
 def test_conformance_push_is_idempotent_under_concurrency(service, record):
     args = {"operation_id": str(uuid.uuid4()), "record": record}
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(lambda _: service.execute("baton_push", args), range(40)))
+        results = list(pool.map(lambda _: service.execute("baton_save", args), range(40)))
     assert all(r["ok"] for r in results), [r for r in results if not r["ok"]][:1]
     assert len({r["data"]["id"] for r in results}) == 1
     assert sum(not r["replayed"] for r in results) == 1
     changed = copy.deepcopy(args)
     changed["record"]["title"] = "Different"
-    assert service.execute("baton_push", changed)["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert service.execute("baton_save", changed)["error"]["code"] == "IDEMPOTENCY_CONFLICT"
     assert service.overview()["total"] == 1
 
 
@@ -185,7 +185,7 @@ def test_conformance_list_filters_and_pagination(service, record):
 
 def test_conformance_invalid_input_writes_nothing(service, record):
     record["context"]["next_steps"] = []
-    assert service.execute("baton_push", {"record": record})["error"]["code"] == "VALIDATION_ERROR"
+    assert service.execute("baton_save", {"record": record})["error"]["code"] == "VALIDATION_ERROR"
     assert service.overview()["total"] == 0
 
 
@@ -210,11 +210,11 @@ def test_conformance_retention_and_receipt_expiry(make_service, record):
     clock = [T0]
     service = make_service(clock=lambda: clock[0], policy=Policy(retention_days=30))
     args = {"operation_id": str(uuid.uuid4()), "record": record}
-    first = ok(service.execute("baton_push", args))
+    first = ok(service.execute("baton_save", args))
     token = ok(service.execute("baton_claim", {"id": first["id"], "holder_label": "codex"}))["claim_token"]
     ok(service.execute("baton_complete", {"id": first["id"], "claim_token": token, "completion": {"outcome": "abandoned", "summary": "Stop"}}))
     clock[0] += RECEIPT_TTL + 60
-    retried = service.execute("baton_push", args)
+    retried = service.execute("baton_save", args)
     assert not retried["replayed"] and retried["data"]["id"] != first["id"]
     clock[0] += 31 * 86400
     push(service, record)
@@ -225,7 +225,7 @@ def test_conformance_policy_limits(make_service, record):
     service = make_service(policy=Policy(max_handoffs=2, max_memories=1))
     push(service, record)
     push(service, record)
-    assert service.execute("baton_push", {"record": record})["error"]["code"] == "STORE_FULL"
+    assert service.execute("baton_save", {"record": record})["error"]["code"] == "STORE_FULL"
     ok(service.execute("baton_memory_update", update(entry("a.one"))))
     assert service.execute("baton_memory_update", update(entry("a.two")))["error"]["code"] == "STORE_FULL"
 
@@ -296,7 +296,7 @@ def test_conformance_workspaces_are_isolated(make_service, supports_workspaces, 
         pytest.skip("Backend serves a single workspace")
     service = make_service()
     a, b = RequestContext(workspace="ws-a", actor="alice"), RequestContext(workspace="ws-b", actor="bob")
-    saved = ok(service.execute("baton_push", {"record": record}, a))
+    saved = ok(service.execute("baton_save", {"record": record}, a))
     ok(service.execute("baton_memory_update", update(entry()), a))
     assert ok(service.execute("baton_list", {"status": "all"}, b))["items"] == []
     assert service.execute("baton_get", {"id": saved["id"]}, b)["error"]["code"] == "NOT_FOUND"

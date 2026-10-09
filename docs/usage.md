@@ -10,11 +10,11 @@ How handoffs and personal memories work, the MCP prompts and dashboard, and the 
 
 ## Handoffs
 
-The MCP supplies the agent with upload instructions and the field schema. The agent should summarize the context available to it, choose a useful title, save through `baton_push`, and return a saved ID with a resume prompt. You do not need to specify JSON, tool arguments, a recipient, or a checklist of fields. Upload saves context; it does not claim or complete the underlying task.
+The MCP supplies the agent with save instructions and the field schema. The agent should summarize the context available to it, choose a useful title, save through `baton_save`, and return a saved ID with a resume prompt. You do not need to specify JSON, tool arguments, a recipient, or a checklist of fields. Saving records context; it does not claim or complete the underlying task.
 
 The saved summary should include your goal, requirements and preferences, decisions and their stated reasons, progress, unsuccessful attempts, unresolved questions, useful references, and next steps. For an open-ended conversation, the next step can be to review the context and ask where you want to continue. Unknown or unavailable context should be recorded as missing rather than invented. The handoff is a summary of the context available to the agent, not an automatic export of the entire chat or its attachments.
 
-Unless you name a receiving harness, the agent leaves `target_client` unset so any connected harness can resume. You can optionally say, "Upload a handoff for Cursor" or name Codex, Claude Code, OMP, or another harness. Client labels support filtering; they do not launch an agent or restrict who can claim a handoff.
+Unless you name a receiving harness, the agent leaves `target_client` unset so any connected harness can resume. You can optionally say, "Save a handoff for Cursor" or name Codex, Claude Code, OMP, or another harness. Client labels support filtering; they do not launch an agent or restrict who can claim a handoff.
 
 Later, in a fresh session of any connected harness, paste the returned prompt:
 
@@ -54,7 +54,7 @@ Running that command twice reuses the same saved example. The app never seeds fa
 
 | Tool | Behavior |
 | --- | --- |
-| `baton_push` | Validate and save immutable source context. Return an ID and receipt. |
+| `baton_save` | Validate and save immutable source context. Return an ID and receipt. |
 | `baton_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
 | `baton_get` | Return every record field and the current lifecycle state, without changing anything. |
 | `baton_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |

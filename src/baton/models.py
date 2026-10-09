@@ -342,7 +342,7 @@ class MemoryExport(MemoryRead):
     format: Literal["json", "markdown"] = "json"
 
 
-INPUTS = {"baton_push": Push, "baton_list": ListQuery, "baton_get": Get,
+INPUTS = {"baton_save": Push, "baton_list": ListQuery, "baton_get": Get,
           "baton_claim": Claim, "baton_resume": Resume, "baton_complete": Complete, "baton_delete": Delete}
 
 INPUTS.update({"baton_memory_read": MemoryRead, "baton_memory_update": MemoryUpdate,

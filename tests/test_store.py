@@ -16,12 +16,12 @@ def claim_args(handoff, **overrides):
 def test_push_replay_and_changed_payload(store, record):
     args = {"operation_id": str(uuid.uuid4()), "record": record}
     with ThreadPoolExecutor(max_workers=10) as executor:
-        results = list(executor.map(lambda _: store.execute("baton_push", args), range(100)))
+        results = list(executor.map(lambda _: store.execute("baton_save", args), range(100)))
     assert all(result["ok"] for result in results)
     assert len({r["data"]["id"] for r in results}) == 1
     assert sum(not r["replayed"] for r in results) == 1
     args["record"]["title"] = "Changed content"
-    assert store.execute("baton_push", args)["error"]["code"] == "IDEMPOTENCY_CONFLICT"
+    assert store.execute("baton_save", args)["error"]["code"] == "IDEMPOTENCY_CONFLICT"
     assert store.overview()["total"] == 1
 
 
@@ -110,7 +110,7 @@ def test_pagination_filters_and_invalid_cursor(store, push):
 ])
 def test_validation_has_no_partial_writes(store, record, change):
     change(record)
-    result = store.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": record})
+    result = store.execute("baton_save", {"operation_id": str(uuid.uuid4()), "record": record})
     assert not result["ok"] and result["error"]["code"] == "VALIDATION_ERROR"
     assert store.overview()["total"] == 0
 
@@ -119,7 +119,7 @@ def test_rollback_before_receipt(store, record, monkeypatch):
     def fail(*args):
         raise sqlite3.OperationalError("Injected failure before receipt")
     monkeypatch.setattr(store, "_event", fail)
-    result = store.execute("baton_push", {"operation_id": str(uuid.uuid4()), "record": record})
+    result = store.execute("baton_save", {"operation_id": str(uuid.uuid4()), "record": record})
     assert not result["ok"]
     assert store.db.execute("SELECT count(*) FROM handoffs").fetchone()[0] == 0
     assert store.db.execute("SELECT count(*) FROM receipts").fetchone()[0] == 0
@@ -128,7 +128,7 @@ def test_rollback_before_receipt(store, record, monkeypatch):
 def test_store_reopen_and_owner_lock(tmp_path, record):
     store = Store(tmp_path)
     args = {"operation_id": str(uuid.uuid4()), "record": record}
-    saved = store.execute("baton_push", args)
+    saved = store.execute("baton_save", args)
     acquired = store.execute("baton_claim", claim_args(saved["data"]))["data"]
     with pytest.raises(RuntimeError, match="already owns"):
         Store(tmp_path)
@@ -138,7 +138,7 @@ def test_store_reopen_and_owner_lock(tmp_path, record):
         current = reopened.execute("baton_get", {"id": saved["data"]["id"]})["data"]
         assert current["claim"]["expires_at"] == acquired["claim"]["expires_at"]
         assert current["revision"] == acquired["revision"]
-        assert reopened.execute("baton_push", args)["replayed"]
+        assert reopened.execute("baton_save", args)["replayed"]
         assert reopened.db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     finally:
         reopened.close()
@@ -181,7 +181,7 @@ def test_lease_limits(store, push):
 
 def test_criteria_by_index_or_reworded_text(store, record):
     record["context"]["acceptance_criteria"] = ["Tests pass", "Docs   updated"]
-    handoff = store.execute("baton_push", {"record": record})["data"]
+    handoff = store.execute("baton_save", {"record": record})["data"]
     token = store.execute("baton_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
     base = {"id": handoff["id"], "claim_token": token}
     missing = store.execute("baton_complete", {**base, "completion": {"outcome": "succeeded", "summary": "Done",
@@ -200,16 +200,16 @@ def test_criteria_by_index_or_reworded_text(store, record):
 
 def test_lenient_inputs_and_helpful_errors(store, record):
     record["context"]["next_steps"][0]["id"] = "read and restate"
-    upper = store.execute("baton_push", {"operation_id": str(uuid.uuid4()).upper(), "record": record})
+    upper = store.execute("baton_save", {"operation_id": str(uuid.uuid4()).upper(), "record": record})
     assert upper["ok"], upper
     handoff_id = upper["data"]["id"]
     assert store.execute("baton_get", {"id": handoff_id.upper()})["ok"]
     assert store.execute("baton_get", {"id": handoff_id})["data"]["record"]["context"]["next_steps"][0]["id"] == "read-and-restate"
-    assert store.execute("baton_push", {"operation_id": str(uuid.uuid1()), "record": record})["ok"]
-    assert store.execute("baton_push", {"record": record})["ok"]
+    assert store.execute("baton_save", {"operation_id": str(uuid.uuid1()), "record": record})["ok"]
+    assert store.execute("baton_save", {"record": record})["ok"]
     assert len(store.execute("baton_list", {"limit": "2"})["data"]["items"]) == 2
     record["source"]["captured_at"] = "2026-10-06T12:00:00+02:00"
-    error = store.execute("baton_push", {"record": record})["error"]
+    error = store.execute("baton_save", {"record": record})["error"]
     assert "record.source" in error["message"] and "UTC" in error["message"]
     assert "must be a UUID" in store.execute("baton_get", {"id": "nope"})["error"]["message"]
 
@@ -238,15 +238,15 @@ def test_receipts_expire_and_retention_purges_completed(tmp_path, record):
     store = Store(tmp_path, clock=lambda: clock[0], retention_days=30)
     try:
         args = {"operation_id": str(uuid.uuid4()), "record": record}
-        first = store.execute("baton_push", args)["data"]
+        first = store.execute("baton_save", args)["data"]
         token = store.execute("baton_claim", {"id": first["id"], "holder_label": "codex"})["data"]["claim_token"]
         store.execute("baton_complete", {"id": first["id"], "claim_token": token, "completion": {"outcome": "abandoned", "summary": "No longer needed"}})
         clock[0] += 8 * 86400
-        retried = store.execute("baton_push", args)
+        retried = store.execute("baton_save", args)
         assert not retried["replayed"] and retried["data"]["id"] != first["id"]
         assert store.execute("baton_get", {"id": first["id"]})["ok"]
         clock[0] += 31 * 86400
-        store.execute("baton_push", {"record": record})
+        store.execute("baton_save", {"record": record})
         assert store.execute("baton_get", {"id": first["id"]})["error"]["code"] == "NOT_FOUND"
         assert store.db.execute("SELECT count(*) FROM events WHERE handoff_id=?", (first["id"],)).fetchone()[0] == 0
     finally:
@@ -265,7 +265,7 @@ def test_delete(store, push):
 
 def test_migrates_v1_store(tmp_path, record):
     store = Store(tmp_path)
-    handoff = store.execute("baton_push", {"record": record})["data"]
+    handoff = store.execute("baton_save", {"record": record})["data"]
     token = store.execute("baton_claim", {"id": handoff["id"], "holder_label": "codex"})["data"]["claim_token"]
     # Rewrite the store into its v1 shape: plaintext token, no receipt timestamps.
     store.db.executescript(f"""
@@ -310,7 +310,7 @@ def test_resume_receipt_token_is_scrubbed_when_claim_ends(store, push):
 
 def test_pre_rename_store_is_adopted(tmp_path, record):
     store = Store(tmp_path)
-    saved = store.execute("baton_push", {"record": record})["data"]
+    saved = store.execute("baton_save", {"record": record})["data"]
     store.close()
     (tmp_path / "baton.sqlite3").rename(tmp_path / "handoff.sqlite3")
     reopened = Store(tmp_path)

@@ -100,7 +100,7 @@ async def populate(url: str):
 
         saved = []
         for spec in HANDOFFS:
-            saved.append(await call("baton_push", {"operation_id": str(uuid.uuid4()), "record": record_for(spec)}))
+            saved.append(await call("baton_save", {"operation_id": str(uuid.uuid4()), "record": record_for(spec)}))
             time.sleep(1.1)  # distinct timestamps, so the list order is stable
         # One handoff in progress, one finished, the rest available.
         await call("baton_resume", {"operation_id": str(uuid.uuid4()), "id": saved[1]["id"], "holder_label": "claude-code"})

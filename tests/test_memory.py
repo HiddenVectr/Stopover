@@ -144,7 +144,7 @@ def test_strict_validation(store, change):
 
 def test_existing_store_upgrade_restart_and_retention(tmp_path, record):
     store = Store(tmp_path)
-    handoff = store.execute('baton_push', {'record': record})['data']
+    handoff = store.execute('baton_save', {'record': record})['data']
     store.close()
     # Simulate a pre-memory database using the established schema 2.
     import sqlite3

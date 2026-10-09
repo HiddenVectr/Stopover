@@ -3,8 +3,11 @@
 All notable changes to Baton. Versions follow [semantic versioning](https://semver.org/); the extension API
 (`Backend`, `RequestContext`, the registry and `create_app` hooks) only changes incompatibly in a major release.
 
-## Unreleased
+## 0.10.0 — 2026-10-09
 
+- **Breaking: `baton_push` is now `baton_save`.** One verb everywhere: you *save* a handoff and *resume* it. Update anything that calls the tool by name (scripts, custom prompts, allowlists such as Claude Code's `mcp__baton__baton_push` permission). Agents pick up the new name automatically from the server. Saves made through the old name aren't recognised as retries of `baton_save`.
+- **Dashboard redesign.** Phones and small tablets show one pane at a time: the list, then a full-screen handoff or memory with a Back button that returns to the same place in the list. Status filters become a row of chips under a compact top bar. On desktop the list keeps its own scroll beside the detail. The detail leads with status, title, sender → recipient and the copy actions, then objective, state and numbered next steps; metadata moves to a Details section. Larger, higher-contrast text, an automatic dark theme, and an empty state that explains save → resume.
+- Wording: the docs, dashboard, `save` prompt and agent instructions say "save a handoff" instead of "upload". Agents still treat "upload a handoff" (or "push", or "hand off") as a save request.
 - Licensed under the Apache License 2.0.
 - **Port:** the server now listens on **8765** everywhere (`baton serve` default, container, Compose and health check). Earlier versions listened on 8080 inside the container and published it as 8765. If you customised `compose.yaml` or run the image directly, map `8765:8765`.
 - The CLI's default `--url` is `http://127.0.0.1:8765/mcp`.
