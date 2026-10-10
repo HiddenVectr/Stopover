@@ -86,7 +86,7 @@ Handoffs and memories survive container restarts in the Docker volume. **`docker
 - [API reference](docs/api.md): tool contracts, retries, claims, and pagination.
 - [Operations](docs/operations.md): storage, configuration, backups, and retention.
 - [Tailscale deployment](docs/remote-http.md): private access across devices.
-- [Implementation](docs/implementation.md): architecture and extension points.
+- [Implementation](docs/implementation.md): how Stopover works inside.
 - [Changelog](CHANGELOG.md): changes and upgrade notes.
 - [Security policy](SECURITY.md): how to report a vulnerability privately, and what Stopover does and doesn't protect.
 

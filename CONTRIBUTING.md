@@ -22,7 +22,7 @@ On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. To run t
 
 ## Pull requests
 
-- Keep each pull request to one change, and add or update tests for it. The suite covers storage, HTTP, MCP over HTTP and stdio, the backend conformance suite and the dashboard in a real browser.
+- Keep each pull request to one change, and add or update tests for it. The suite covers storage, HTTP, MCP over HTTP and stdio and the dashboard in a real browser.
 - Match the surrounding code: its naming, comment density and style. Comments explain *why*, not what.
 - Changing an MCP tool, its input schema or a model? Regenerate the committed schemas in `schemas/` (the test `test_committed_schemas_match_models` shows the difference) and update [docs/api.md](docs/api.md).
 - Changing the dashboard? Check it at phone and desktop widths, and regenerate the documentation screenshots with `.venv/bin/python scripts/screenshots.py` if they changed.

@@ -22,7 +22,6 @@ Stopover is built for one person or a trusted group on a private network. Please
 - A web page you visit being able to read or change Stopover data through your browser.
 - Script injection or other unsafe rendering in the dashboard.
 - Data corruption, loss of claim fencing or retry safety, and escaping the data directory.
-- Extension points (`create_app` hooks, authenticators) behaving differently from their documentation, in a way a host could rely on for security.
 
 **Out of scope:**
 

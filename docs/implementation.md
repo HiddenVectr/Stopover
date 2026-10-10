@@ -20,32 +20,21 @@ Design notes:
 
 Source records are immutable. A completed record remains visible and browsable. The service does not transfer private model reasoning or assume that a source agent's text authorizes recipient actions.
 
-## Architecture and extension points
-
-The code is layered so a hosted build can reuse everything except storage and access control:
+## Architecture
 
 | Module | Role |
 | --- | --- |
-| `context.py` | `RequestContext(workspace, actor)`: who is asking. Local requests use workspace `local`. |
 | `domain.py` | Storage-independent rules: summaries, cursors, claim verification, acceptance-criteria matching, errors. |
-| `backend.py` | The storage contract: `Backend.transaction(ctx, write)` yields a `Transaction` scoped to one workspace, with rows as plain dicts. |
-| `sqlite_backend.py` | The local backend: single owner, single workspace, all SQL and migrations. Other workspaces get `UNKNOWN_WORKSPACE`. |
-| `service.py`, `memory.py` | `StopoverService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
-| `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. `core_registry().copy()` can be extended with more tools. |
-| `server.py` | `create_app(service=, auth=, allowed_hosts=, extra_routes=, middleware=)`. `auth` is an async callable that maps a request to a `RequestContext` (or `None` for 401) for `/mcp` and `/api/*`; MCP handlers and the dashboard API pass that context to the service, and events record its `actor`. |
-| `domain.Policy` | Per-workspace limits and retention. `StopoverService(policy=...)` takes a `Policy` or a function of the `RequestContext`, so a hosted build can vary limits by plan. |
-| `on_event` | `StopoverService(on_event=...)` receives events such as `handoff.pushed`, `handoff.completed` and `memory.updated` after each commit (never on replays or rollbacks). Events carry IDs, revisions and the actor, never handoff or memory content; handler errors are logged and ignored. |
-| Dashboard sign-in | When `/api/*` answers 401 (an `auth` hook is configured), the dashboard asks for an access token, keeps it in `localStorage`, and sends it as `Authorization: Bearer`. Its connection instructions then show the token header with a `YOUR_TOKEN` placeholder. Without auth nothing changes. With `create_app(login_url=...)`, unauthenticated dashboard API calls return that URL and the dashboard redirects there (same origin only, with `return_to`). If the host serves `GET /api/session` (`user`, `workspace`, `logout_url`), the sidebar shows the signed-in account and Sign out posts to `logout_url`. Optional `links` (`[{label, url}]`, same-origin paths only) appear in the sidebar, and `access_token_url` switches the *Connect your agents* dialog to token instructions with a link to create one; `mcp_sign_in: true` switches it to sign-in instructions instead (add the URL, approve in the browser), keeping the token link as a fallback. The dashboard sends same-origin cookies so hosts can use session cookies; MCP stays bearer-only. |
-| Branding | `create_app(brand=Brand(...))` replaces the dashboard's product name, page title, sidebar status line ("Self-hosted inbox") and placeholder workspace. The server writes them into the page before sending it, so nothing flashes on load; `dashboard_html(brand)` returns the same page for hosts that serve the dashboard on their own route. Without `brand` the page is unchanged. |
-| MCP OAuth discovery | `create_app(mcp_challenge=fn)`: `fn(request)` returns the `WWW-Authenticate` value for unauthenticated `/mcp` requests, such as `Bearer resource_metadata="https://host/.well-known/oauth-protected-resource/mcp"`, so MCP clients can find the host's authorization server. Without it, the challenge is plain `Bearer`. |
-| `testing.py` | The backend conformance suite. A project with its own `Backend` runs it with `from stopover.testing import *` and a `make_service` fixture (install the `testing` extra). Stopover runs it against SQLite in `tests/test_conformance.py`. |
-| `store.py` | `Store`: the local deployment (`StopoverService` over SQLite), kept for existing imports. |
-
-A hosted build depends on this package and supplies its own `Backend` (for example Postgres with a workspace column), an authenticator, and any extra tools or routes. Tests guard the boundary: the service layer never references SQLite.
+| `sqlite_backend.py` | The SQLite store: single owner, all SQL and migrations. |
+| `service.py`, `memory.py` | Validation, idempotent receipts, monotonic time, retention, and every tool handler. |
+| `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. |
+| `server.py` | The HTTP app: the MCP endpoint, the read-only dashboard API, the dashboard page, and the request checks (Host allowlist, Origin, Fetch Metadata, body limit). |
+| `bridge.py` | The stdio bridge, which forwards to the running server. |
+| `models.py` | The input models, from which the committed JSON schemas are generated. |
 
 ## Personal memory implementation
 
-Personal memory is a separate feature from handoffs (see the [user guide](memory.md)), sharing only the database and request handling. `memory.py` holds its rules; the backend stores memory rows, a store-wide monotonic revision, and the memory idempotency receipts in the same SQLite database. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
+Personal memory is a separate feature from handoffs (see the [user guide](memory.md)), sharing only the database and request handling. `memory.py` holds its rules; the database stores memory rows, a store-wide monotonic revision, and the memory idempotency receipts in the same SQLite database. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
 
 Read/export pagination binds a cursor to its filters and the first page's store revision, which every page reports as the checkpoint. Concurrent writes do not abort pagination; they carry higher revisions, so the next incremental read returns them. Incremental reads include deleted IDs, including through filters where erased content cannot be matched. Exports are paginated and expose a completion flag and continuation cursor.
 

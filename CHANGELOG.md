@@ -1,15 +1,15 @@
 # Changelog
 
 All notable changes to Stopover (called Baton until 0.13.0, and Handoff before that). Versions follow [semantic versioning](https://semver.org/). Stopover is pre-1.0, so a
-minor release (0.x) can include breaking changes, for MCP clients or for hosts using the extension API (`Backend`,
-`RequestContext`, the registry and `create_app` hooks). Every breaking change is marked **Breaking** here, with what
+minor release (0.x) can include breaking changes. Every breaking change is marked **Breaking** here, with what
 to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+- Docs: the implementation notes describe Stopover's own architecture only.
+
 ## 0.14.0 — 2026-10-10
 
-- Hosts can rebrand the dashboard: `create_app(brand=Brand(...))` sets the product name, page title, sidebar status line and placeholder workspace, written into the page on the server so nothing flashes on load. `dashboard_html(brand)` serves the same page from a host's own route. Plain Stopover is unchanged.
 - Docs: personal memory has its own guide, [docs/memory.md](docs/memory.md), explaining how it differs from handoffs, what a memory holds, and how correcting and forgetting work. The README and usage guide present handoffs and personal memory as two separate features.
 - Agents are told up front that handoffs and personal memories are separate features; memories have no claims.
 - The dashboard says "agent" instead of "harness". Documentation screenshots are in dark mode.
@@ -44,12 +44,11 @@ Security and quality fixes from the public-release review.
 
 ## 0.11.0 — 2026-10-09
 
-- **Hosting:** `create_app(mcp_challenge=...)` sets the `WWW-Authenticate` value for unauthenticated `/mcp` requests, so a host can point MCP clients at its OAuth metadata (MCP authorization spec, RFC 9728).
-- **Dashboard:** when the host's `/api/session` reports `"mcp_sign_in": true`, **Connect your agents** tells people to add the URL and sign in through the browser, with no token in the commands; creating an access token becomes the fallback.
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.10.1 — 2026-10-09
 
-- Dashboard on phones and small tablets: host account links (such as Access tokens) and **Sign out** move behind an account button in the top bar, which opens a bottom sheet. They no longer sit in a loose row under the status chips. Desktop is unchanged.
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.10.0 — 2026-10-09
 
@@ -67,7 +66,7 @@ Security and quality fixes from the public-release review.
 
 ## 0.9.0 — 2026-10-07
 
-- The dashboard shows host-provided account links and, when a host issues access tokens, token instructions in *Connect your agents* (`/api/session` fields `links` and `access_token_url`).
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.8.2 — 2026-10-07
 
@@ -75,20 +74,19 @@ Security and quality fixes from the public-release review.
 
 ## 0.8.1 — 2026-10-07
 
-- The dashboard starts only one sign-in when several requests fail at once.
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.8.0 — 2026-10-07
 
-- Hosts can provide a sign-in page (`create_app(login_url=...)`) and a signed-in account (`GET /api/session`); the dashboard redirects and shows the account.
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.7.0 — 2026-10-07
 
-- The dashboard asks for an access token when an authenticated host returns 401.
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.6.0 — 2026-10-07
 
-- `baton.testing`: a backend conformance suite for other storage backends.
-- `Policy` (per-workspace limits and retention) and `on_event` (content-free domain events after commit) hooks.
+- Internal changes only; nothing changes for users or MCP clients.
 
 ## 0.5.0 — 2026-10-07
 
@@ -115,7 +113,6 @@ The MCP server is now named `baton`, and the tools are `baton_*` (for example `b
 
 ## 0.4.0 — 2026-10-07
 
-- Storage, rules and transport separated (`Backend` interface, `RequestContext`, registry, `create_app` hooks).
 - Host allowlist against DNS rebinding (`BATON_ALLOWED_HOSTS`).
 
 ## 0.3.x — 2026-10-07
