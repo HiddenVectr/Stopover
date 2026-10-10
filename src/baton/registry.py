@@ -17,13 +17,18 @@ class Tool:
     model: type
     description: str
     handler: Callable[..., tuple[Any, bool]]
+    # MCP tool annotations: hints for clients (for example, whether to ask before calling). Defaults are cautious.
     read_only: bool = False
     destructive: bool = False
+    # Repeating the call with identical arguments has no further effect. Tools that are idempotent only when the
+    # caller reuses an operation_id are not: the hint describes identical arguments alone.
+    idempotent: bool = False
 
     def definition(self):
         return types.Tool(name=self.name, description=self.description, inputSchema=self.model.model_json_schema(),
                           annotations=types.ToolAnnotations(readOnlyHint=self.read_only, destructiveHint=self.destructive,
-                                                            idempotentHint=True, openWorldHint=False))
+                                                            idempotentHint=self.read_only or self.idempotent,
+                                                            openWorldHint=False))
 
 
 @dataclass

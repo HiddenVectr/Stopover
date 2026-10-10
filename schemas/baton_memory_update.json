@@ -32,7 +32,7 @@
         },
         "expected_revision": {
           "description": "0 for a new key; otherwise the revision returned by baton_memory_read (for a forgotten key, its deletion-marker revision together with recreate=true).",
-          "ge": 0,
+          "minimum": 0,
           "title": "Expected Revision",
           "type": "integer"
         },

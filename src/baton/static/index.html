@@ -92,8 +92,8 @@
     </main>
   </div>
 
-  <dialog id="setup-dialog">
-    <div class="dialog-heading"><h2>Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div>
+  <dialog id="setup-dialog" aria-labelledby="setup-title">
+    <div class="dialog-heading"><h2 id="setup-title">Connect your agents</h2><button id="close-setup" class="icon-button" aria-label="Close connection instructions">×</button></div>
     <p id="setup-token-link" class="setup-token-link" hidden><a id="setup-token-anchor" class="button primary" href="/">Create an access token</a></p>
     <p class="muted" id="setup-intro">Add this Streamable HTTP MCP server to your harness. No token or login is needed.</p>
     <h3>MCP URL</h3>
@@ -103,7 +103,8 @@
     <h3>Claude Code</h3>
     <pre id="claude-add"></pre>
     <p class="small muted"><span id="setup-auth">In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None.</span></p>
-    <p class="small muted">Open a fresh agent session, then ask it to save a handoff or “update my Baton memory”. To retrieve personal memories in another harness, say “import my Baton memory”.</p>
+    <p class="small muted"><strong>Check it worked:</strong> in a fresh agent session, ask “List my Baton handoffs.” An empty list is fine; it means the connection works and nothing was changed.</p>
+    <p class="small muted">Then ask it to save a handoff, or “update my Baton memory”. To retrieve personal memories in another harness, say “import my Baton memory”. <a href="https://github.com/HiddenVectr/Baton/blob/main/docs/clients.md" target="_blank" rel="noopener noreferrer">Setup for Cursor, OMP, Hermes Agent, Muse Code and others</a>.</p>
   </dialog>
   <dialog id="account-dialog" class="sheet" aria-labelledby="account-name">
     <div class="dialog-heading">
@@ -112,14 +113,14 @@
     </div>
     <nav id="account-links" class="account-links" aria-label="Account links"></nav>
   </dialog>
-  <dialog id="copy-dialog">
-    <div class="dialog-heading"><h2>Copy this text</h2><button id="close-copy" class="icon-button" aria-label="Close copy text">×</button></div>
+  <dialog id="copy-dialog" aria-labelledby="copy-title">
+    <div class="dialog-heading"><h2 id="copy-title">Copy this text</h2><button id="close-copy" class="icon-button" aria-label="Close copy text">×</button></div>
     <p class="muted">Your browser couldn’t use the clipboard. The text is selected below; press Ctrl+C or ⌘C to copy it.</p>
     <textarea id="copy-text" class="copy-text" aria-label="Text to copy" readonly></textarea>
   </dialog>
-  <dialog id="signin-dialog">
+  <dialog id="signin-dialog" aria-labelledby="signin-title">
     <form id="signin-form" method="dialog">
-      <div class="dialog-heading"><h2>Sign in</h2></div>
+      <div class="dialog-heading"><h2 id="signin-title">Sign in</h2></div>
       <p class="muted">This Baton server requires an access token. It is stored in this browser until you sign out.</p>
       <label class="signin-label" for="signin-token">Access token</label>
       <input id="signin-token" class="signin-input" type="password" autocomplete="current-password" required>

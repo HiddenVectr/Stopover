@@ -1,7 +1,24 @@
 # Changelog
 
-All notable changes to Baton. Versions follow [semantic versioning](https://semver.org/); the extension API
-(`Backend`, `RequestContext`, the registry and `create_app` hooks) only changes incompatibly in a major release.
+All notable changes to Baton. Versions follow [semantic versioning](https://semver.org/). Baton is pre-1.0, so a
+minor release (0.x) can include breaking changes, for MCP clients or for hosts using the extension API (`Backend`,
+`RequestContext`, the registry and `create_app` hooks). Every breaking change is marked **Breaking** here, with what
+to update. Patch releases (0.x.y) don't break anything.
+
+## 0.12.0 — 2026-10-09
+
+Security and quality fixes from the public-release review.
+
+- **Security:** Starlette upgraded to 1.7.0 (minimum 1.3.1), fixing five advisories in 0.52.1, including NTLM credential disclosure when serving static files on native Windows.
+- **Security:** a browser `Origin` header must now be the Baton server itself; foreign, invalid and `null` origins get 403, as the MCP transport spec requires. Native MCP clients send no `Origin` and are unaffected. **Breaking** only for setups that reached Baton from a page on another origin, which was never supported.
+- **Security:** `Host` headers must be exactly `host[:port]`. Malformed ones (with paths, queries, userinfo or bad ports) are refused, even when `BATON_ALLOWED_HOSTS=*`.
+- MCP tool annotations are accurate per tool: saves, claims, resumes and completions no longer claim idempotency (they're retry-safe only with the same `operation_id`), and `baton_memory_update` is marked destructive because it can overwrite a memory.
+- The memory tools' JSON schemas use `minimum` for revisions (Pydantic 2.13 emitted a non-standard `ge`).
+- Minimum `mcp` version is 1.30; earlier versions failed at startup. CI tests the minimum versions on Python 3.10.
+- Dashboard: selecting a handoff shows a loading state immediately, so **Copy resume prompt** can no longer copy the previously open handoff on a slow connection. An empty search or filter says "No matching handoffs" with **Clear filters**. The 15-second refresh keeps keyboard focus and list scroll; opening a handoff moves focus to its title, and Back returns it to the row. Dialogs have accessible names; the connect dialog adds a read-only connection check and a link to every client's setup. Completed handoffs show their outcome.
+- Packaging: the Docker image and wheel include `LICENSE` and `README.md`. CI adds a dependency audit, packaging checks, Windows tests, and a Docker smoke test under the Compose restrictions with a restart.
+- Project: `SECURITY.md`, `CONTRIBUTING.md`, Dependabot, package links, and an accurate pre-1.0 compatibility policy. Documentation: shorter README and usage guide, a new API reference, complete backup, restore and update steps, and an accurate description of the browser protections.
+
 
 ## 0.11.0 — 2026-10-09
 

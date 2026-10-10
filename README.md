@@ -1,97 +1,88 @@
 # Baton
 
-**Pass work between AI coding agents.** Baton is a small, self-hosted MCP server that gives Claude Code, Codex, Cursor, Oh My Pi (OMP), Hermes Agent and any other MCP client one shared inbox. Say "save a handoff" in one agent, then "Resume Handoff `<id>`" in another, and the second agent picks up with your goal, decisions, progress and next steps.
+**Save work in one AI coding agent and continue it in another.**
 
-![Claude Code saves a handoff to Baton's inbox; later, Codex resumes it by ID and continues with the goal, decisions and next steps](docs/images/how-it-works.svg)
+Baton is a small, self-hosted server with a web dashboard. It connects through MCP, the protocol agents use to call external tools. Your agent saves a summary of the goal, decisions, progress, and next steps. Another connected agent reads that summary and continues the task.
 
-- **One container, no accounts.** Docker runs the MCP server and a web dashboard, with SQLite in a persistent volume. Clients connect by URL; they need no Docker, Python, token or login.
-- **Safe ownership.** Agents claim a handoff before working on it, so two agents don't pick up the same task, and retries never create duplicates.
-- **Personal memory that travels.** Ask any agent to "update my Baton memory", then "import my Baton memory" in another, and your preferences and project context come along.
-- **Private by default.** Listens on loopback only, makes no outbound calls and sends no telemetry. Share it across devices with Tailscale.
+![Claude Code saves a handoff; Codex resumes its goal, decisions, progress, and next steps](docs/images/how-it-works.svg)
+
+Run Baton on your computer for local use, or share it privately across your devices with Tailscale. It has no accounts or built-in authentication: anyone who can reach it shares access to all handoffs and personal memories.
 
 ## Quickstart
 
-Requires Docker Engine 28+ (or current Docker Desktop) with Compose.
+You need Git and Docker Engine 28+ with Compose v2, or current Docker Desktop. Docker is needed only on the machine running Baton.
 
 ```sh
 git clone https://github.com/HiddenVectr/Baton.git
 cd Baton
-docker compose up --build -d
+docker compose up --build -d --wait --wait-timeout 60
+docker compose ps
 ```
 
-**1. Open the dashboard** at **http://127.0.0.1:8765**. It's empty until your first handoff.
+Open **http://127.0.0.1:8765**. The start command waits for the service to become healthy. The dashboard starts empty. If it does not open, check `docker compose logs --tail=50 baton`.
 
-**2. Connect an agent.** For Claude Code:
+## Connect your agent
+
+Choose the command for your agent:
 
 ```sh
+# Claude Code
 claude mcp add --scope user --transport http baton http://127.0.0.1:8765/mcp
+
+# Codex
+codex mcp add baton --url http://127.0.0.1:8765/mcp
 ```
 
-The dashboard's **Connect your agents** button shows the commands for each client, with your server's URL filled in. Start a fresh agent session afterwards; in Claude Code, `/mcp` should list `baton` as connected.
+Start a fresh agent session. Ask it:
 
-**3. Save a handoff.** In that agent, say:
+> List my Baton handoffs without claiming any.
+
+An empty successful result confirms the connection. For Cursor, OMP, Hermes, Muse Code, and other MCP clients, see [client setup](docs/clients.md). The dashboard's **Connect your agents** button also shows the server URL and setup commands.
+
+## Save and resume
+
+In your connected agent, say:
 
 > Save a handoff so I can continue this conversation later.
 
-It saves a summary and replies with a prompt like `Resume Handoff 3f2a9c1e-…`, and the handoff appears in the dashboard.
+The agent saves a summary and gives you a prompt such as `Resume Handoff <id>`.
 
-**4. Resume it anywhere.** Paste that prompt into a fresh session of any connected agent. It claims the task and continues where the last one stopped.
+Connect your other agent to the same Baton server, start a fresh session, and paste the prompt. It claims the handoff and continues using the saved context. You can also copy the prompt from the dashboard.
 
-![The Baton dashboard: a list of handoffs with their status, project and agents, and the selected handoff's objective, current state and next steps](docs/images/handoff-detail.png)
+![A handoff in the Baton dashboard, showing its objective, current state, and next steps](docs/images/handoff-detail.png)
 
-## How it works
+The receiving agent needs access to the project files. Baton saves summaries rather than full transcripts, does not transfer files, and does not start agents for you. A claim helps coordinate work; it cannot prevent an agent from editing files after its claim expires.
 
-| Concept | What it is |
-| --- | --- |
-| **Handoff** | A saved summary of a task: objective, background, requirements, decisions and reasons, progress, failed attempts, open questions, references, next steps and acceptance criteria. The agent builds it from its conversation; you don't fill in fields. Records are immutable; corrections are new handoffs linked by `parent_id`. |
-| **Claim** | A lease (1 hour by default) that marks who is working on a handoff. Resuming claims it; completing records `succeeded` (with evidence for each acceptance criterion), `blocked` or `abandoned`. |
-| **Personal memory** | One shared collection of facts about you, with topic keys, revisions and provenance, so agents can sync it without overwriting each other. |
-| **Prompts** | Optional shortcuts, such as `/mcp__baton__save`, `/mcp__baton__resume <id>` and `/mcp__baton__inbox` in Claude Code. Plain-language requests work everywhere. |
-| **Dashboard** | A read-only web view to search and filter handoffs, read their full context and history, browse memories and copy resume prompts. |
+## Share personal context
 
-Baton transfers context, not the workspace: it does not launch agents, copy project files, or sync agents' own memory files. The receiving agent needs its own access to the project.
+To save preferences and relevant personal context, say:
 
-Details: [Using Baton](docs/usage.md) covers the workflows, prompts, dashboard and the exact tool contracts.
+> Update my Baton memory.
 
-## Connect your agents
+In another connected agent, say:
 
-![The Connect your agents dialog in the dashboard, with the MCP URL and ready-to-paste commands for Codex and Claude Code](docs/images/connect-dialog.png)
+> Import my Baton memory.
 
-Every client uses the same settings: transport **Streamable HTTP**, URL **`http://127.0.0.1:8765/mcp`**, authentication **None**.
+Browse saved memories in **Personal memories**. Ask an agent to correct or forget a specific memory. Baton stores one shared collection; each agent decides whether to retain imported context locally.
 
-| Client | Command or config |
-| --- | --- |
-| Claude Code | `claude mcp add --scope user --transport http baton http://127.0.0.1:8765/mcp` |
-| Codex | `codex mcp add baton --url http://127.0.0.1:8765/mcp` |
-| Hermes Agent | `hermes mcp add baton --url http://127.0.0.1:8765/mcp` |
-| Cursor | Add [clients/cursor.json](clients/cursor.json) to `~/.cursor/mcp.json` |
-| OMP | Add [clients/omp.json](clients/omp.json) to `~/.omp/agent/mcp.json` |
-| Muse Code (Meta) | Add [clients/muse-code.json](clients/muse-code.json) to `~/.config/muse/settings.json` |
-| Other | Add a Streamable HTTP server named `baton` with the URL above ([example](clients/generic-http.json)) |
+## Keep your data private
 
-See [Connect an AI harness](docs/clients.md) for config files, verification and troubleshooting. To use Baton from other devices, publish it on your tailnet with `tailscale serve` and use the HTTPS URL plus `/mcp`; see [Tailscale deployment](docs/remote-http.md).
+The supplied Compose file publishes Baton on localhost. **Do not expose this deployment to the public internet.** For access from your other devices, use [Tailscale Serve with restricted access rules](docs/remote-http.md).
 
-## Security
+Do not save credentials or secrets. Context an agent reads may be sent to that agent's model provider.
 
-Baton has **no authentication**: anyone who can reach it can read and change the shared inbox. It is built for one person or a trusted team on a private network.
+Handoffs and memories survive container restarts in the Docker volume. **`docker compose down -v` deletes that volume.** See [operations](docs/operations.md) for backups, restore, and updates.
 
-- Compose publishes the port on `127.0.0.1` only. For remote access, use Tailscale Serve with restricted access rules. **Do not expose it to the public internet.**
-- It only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or a `*.ts.net` name (extend with `BATON_ALLOWED_HOSTS`), and rejects cross-site browser requests, which blocks DNS-rebinding and drive-by attacks from web pages.
-- It makes no outbound calls and has no telemetry, filesystem mount or Docker socket.
-- Anything an agent reads from Baton can reach that agent's model provider. Don't put secrets in handoffs or memories.
+## More information
 
-See [Operating Baton](docs/operations.md) for the full security model.
-
-## Documentation
-
-| Guide | Covers |
-| --- | --- |
-| [Connect an AI harness](docs/clients.md) | Setup for each client, verification, troubleshooting |
-| [Using Baton](docs/usage.md) | Handoff and memory workflows, prompts, dashboard, tool contracts |
-| [Operating Baton](docs/operations.md) | Configuration, storage, backup, retention, import/export, security model |
-| [Tailscale deployment](docs/remote-http.md) | Hosting Baton privately for your other devices |
-| [Implementation notes](docs/implementation.md) | Architecture, extension points, verification |
-| [CHANGELOG.md](CHANGELOG.md) | Release notes and upgrade steps |
+- [Using Baton](docs/usage.md): everyday workflows and troubleshooting.
+- [Client setup](docs/clients.md): commands and configuration for each agent.
+- [API reference](docs/api.md): tool contracts, retries, claims, and pagination.
+- [Operations](docs/operations.md): storage, configuration, backups, and retention.
+- [Tailscale deployment](docs/remote-http.md): private access across devices.
+- [Implementation](docs/implementation.md): architecture and extension points.
+- [Changelog](CHANGELOG.md): changes and upgrade notes.
+- [Security policy](SECURITY.md): how to report a vulnerability privately, and what Baton does and doesn't protect.
 
 ## Development
 
@@ -103,18 +94,10 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. Tests use isolated temporary stores and cover retry safety, simultaneous claims, lease fencing, rollback, durability, real HTTP and stdio MCP round trips, host and cross-site checks, and the dashboard in a real browser (including mobile layout and hostile text).
+On Windows, use executables in `.venv\Scripts\`. See [local development](docs/implementation.md#local-development) for running without Docker and regenerating screenshots.
 
-Run without Docker:
-
-```sh
-.venv/bin/python -m baton --data-dir ./data serve --host 127.0.0.1 --port 8765
-```
-
-Regenerate the documentation screenshots with `.venv/bin/python scripts/screenshots.py`, which fills a throwaway server with synthetic data.
-
-Never run two servers against the same data directory. Production packages are pinned in `requirements.lock` and the Docker base image by digest. The server uses the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Baton is pre-1.0: a minor release can include breaking changes, always marked in the [changelog](CHANGELOG.md), and only the latest release gets fixes.
 
 ## License
 
-Baton is licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE).

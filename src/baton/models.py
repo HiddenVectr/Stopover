@@ -280,7 +280,8 @@ MemoryKey = Annotated[str, BeforeValidator(_slug), StringConstraints(strip_white
     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$")]
 MemoryCategory = Literal["fact", "preference", "habit", "goal", "project_context"]
 MemoryText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
-Revision = Annotated[int, BeforeValidator(_not_bool), Field(ge=0)]
+# Field before BeforeValidator: in the other order, Pydantic 2.13 emits a non-standard "ge" instead of "minimum".
+Revision = Annotated[int, Field(ge=0), BeforeValidator(_not_bool)]
 
 
 class MemoryEntry(Model):
@@ -324,7 +325,7 @@ class MemoryRead(Model):
 
 class MemoryForgetItem(Model):
     key: MemoryKey
-    expected_revision: Annotated[int, BeforeValidator(_not_bool), Field(ge=1)] | None = None
+    expected_revision: Annotated[int, Field(ge=1), BeforeValidator(_not_bool)] | None = None
 
 
 class MemoryForget(Model):

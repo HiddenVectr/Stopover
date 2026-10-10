@@ -10,7 +10,7 @@
         "expected_revision": {
           "anyOf": [
             {
-              "ge": 1,
+              "minimum": 1,
               "type": "integer"
             },
             {

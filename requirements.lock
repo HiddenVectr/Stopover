@@ -25,7 +25,7 @@ python-multipart==0.0.32
 referencing==0.37.0
 rpds-py==0.30.0
 sse-starlette==3.5.0
-starlette==0.52.1
+starlette==1.7.0
 tomli==2.4.1
 typing-inspection==0.4.4
 typing_extensions==4.16.0

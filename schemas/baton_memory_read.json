@@ -41,7 +41,7 @@
     "since_revision": {
       "anyOf": [
         {
-          "ge": 0,
+          "minimum": 0,
           "type": "integer"
         },
         {

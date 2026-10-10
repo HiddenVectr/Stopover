@@ -1,11 +1,14 @@
 """HTTP application: MCP endpoint, read-only dashboard API, and the extension points used by hosted builds."""
 from __future__ import annotations
 
+import ipaddress
 import json
+import re
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable
+from urllib.parse import urlsplit
 
 import anyio
 import mcp.types as types
@@ -75,15 +78,61 @@ def parse_hosts(value):
     return [h.strip().lower() for h in (value or "").split(",") if h.strip()]
 
 
+_AUTHORITY = re.compile(r"\[(?P<ip6>[0-9A-Fa-f:.]+)\]|(?P<name>[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)")
+
+
+def parse_authority(value):
+    """(host, port or None) for a Host header or an Origin's authority, or None if it isn't exactly host[:port].
+
+    Strict on purpose: anything else (paths, queries, userinfo, stray characters) could make code that rebuilds
+    URLs from the Host header see a different request from the one being routed.
+    """
+    value = value.strip().lower()
+    match = _AUTHORITY.match(value)
+    if match is None:
+        return None
+    rest = value[match.end():]
+    port = None
+    if rest:
+        if not rest.startswith(":") or not rest[1:].isdigit() or len(rest) > 6:
+            return None
+        port = int(rest[1:])
+        if not 1 <= port <= 65535:
+            return None
+    if match["ip6"]:
+        try:
+            ipaddress.IPv6Address(match["ip6"])
+        except ValueError:
+            return None
+        return match["ip6"], port
+    host = match["name"]
+    if ".." in host or any(len(label) > 63 or label.startswith("-") or label.endswith("-") for label in host.split(".")):
+        return None
+    return host, port
+
+
 def host_allowed(header, patterns):
-    if "*" in patterns:
-        return True
-    host = header.strip().lower()
-    if host.startswith("["):
-        host = host[1:host.find("]")]
-    elif host.count(":") == 1:
-        host = host.rsplit(":", 1)[0]
-    return bool(host) and any(host.endswith(p[1:]) if p.startswith("*.") else host == p for p in patterns)
+    parsed = parse_authority(header)
+    if parsed is None:
+        return False  # malformed Host headers are refused even when every host is allowed ("*")
+    host = parsed[0]
+    return "*" in patterns or any(host.endswith(p[1:]) if p.startswith("*.") else host == p for p in patterns)
+
+
+def origin_allowed(origin, host_header):
+    """Whether a browser's Origin is this server itself. Native MCP clients send no Origin, which is allowed.
+
+    Compares host and port only: a proxy that terminates TLS (Tailscale Serve, a load balancer) makes the scheme
+    differ. With no port in the Host header, the default port of either scheme matches.
+    """
+    parts = urlsplit(origin)
+    if parts.scheme not in ("http", "https") or parts.path or parts.query or parts.fragment or parts.username or parts.password:
+        return False
+    theirs, ours = parse_authority(parts.netloc), parse_authority(host_header)
+    if theirs is None or ours is None or theirs[0] != ours[0]:
+        return False
+    their_port = theirs[1] or (443 if parts.scheme == "https" else 80)
+    return their_port == ours[1] if ours[1] else their_port in (80, 443)
 
 
 class HostAllowlist:
@@ -138,6 +187,11 @@ class RequestBoundary:
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         headers = dict(scope["headers"])
+        # Browsers send Origin on cross-site and state-changing requests; native MCP clients don't send it at all.
+        # A present Origin must be this server (MCP Streamable HTTP transport requirement); "null" never is.
+        origin = headers.get(b"origin")
+        if origin is not None and not origin_allowed(origin.decode("latin-1"), headers.get(b"host", b"").decode("latin-1")):
+            return await JSONResponse({"error": "Origin not allowed"}, status_code=403)(scope, receive, send)
         # Native MCP clients do not send Fetch Metadata. Reject cross-site browser
         # requests even when a browser omits Origin (for example an image GET).
         # Top-level GET/HEAD navigations are allowed: following a link from another site, or a sign-in

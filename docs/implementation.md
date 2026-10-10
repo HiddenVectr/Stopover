@@ -1,6 +1,6 @@
 # Implementation notes
 
-Baton exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [client setup guide](clients.md) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. A Host allowlist (loopback names and `*.ts.net` by default, extended with `BATON_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
+Baton exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [API reference](api.md) for tool contracts and the [client setup guide](clients.md) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. A Host allowlist (loopback names and `*.ts.net` by default, extended with `BATON_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
 
 The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same eleven tool schemas and five prompts and preserve structured results and MCP error flags.
 
@@ -8,7 +8,7 @@ Natural-language save guidance is included in both the server initialization ins
 
 SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts. Only a SHA-256 hash of each claim token is stored, and the token alone authorizes renew/release/complete; an expired lease keeps working until another agent acquires the handoff. Mutation timestamps never move backward, even if the system clock does. Receipts expire after 7 days. The read-only web API uses these same store methods, with a separate paginated event history.
 
-The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. The middleware retains cross-site browser request rejection and a 64 KiB body limit. Unexpected Host headers are rejected, which blocks DNS rebinding. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
+The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. The middleware retains cross-site browser request rejection and a 64 KiB body limit. Unexpected Host headers are rejected; this is an additional request boundary, not authentication. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
 
 Design notes:
 
@@ -54,6 +54,18 @@ The existing dashboard adds a Personal memories view with full-text display, top
 
 ## Verification
 
-All tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and allowed remote Host/Origin headers over real MCP HTTP connections, with initialization, tool discovery, saving and retrieval. Unknown hosts are rejected on every route, and the allowlist can be extended or disabled. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
+All tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and allowed remote Host/Origin headers over real MCP HTTP connections, with initialization, tool discovery, saving and retrieval. Unknown and malformed hosts are rejected on every route (malformed ones even when the allowlist is `*`), and the allowlist can be extended. Foreign, invalid and `null` `Origin` headers are rejected for MCP and the API; requests without `Origin` (native clients) are accepted. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
 
 Dashboard screenshots: [desktop](images/dashboard.png), [mobile](images/dashboard-mobile.png). Regenerate all images with `.venv/bin/python scripts/screenshots.py`.
+
+## Local development
+
+Install the development dependencies using the [README instructions](../README.md#development). Run without Docker:
+
+```sh
+.venv/bin/python -m baton --data-dir ./data serve --host 127.0.0.1 --port 8765
+```
+
+Never run two servers against the same data directory. Production packages are pinned in `requirements.lock` and the Docker base image by digest. The server uses the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).
+
+Regenerate the documentation screenshots with `.venv/bin/python scripts/screenshots.py`. It starts a throwaway server and fills it with synthetic data.

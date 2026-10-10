@@ -341,10 +341,14 @@ def core_registry() -> Registry:
         "baton_memory_forget": lambda s, r, c, n: s.memory_write("baton_memory_forget", r, c, n),
     }
     read_only = {"baton_list", "baton_get", "baton_memory_read", "baton_memory_export"}
-    destructive = {"baton_delete", "baton_memory_forget"}
+    # Delete and forget remove data; memory_update can overwrite a memory's content.
+    destructive = {"baton_delete", "baton_memory_forget", "baton_memory_update"}
+    # Repeating these with identical arguments changes nothing further. Saves, claims and completions are only
+    # retry-safe when the caller reuses the same operation_id, so they don't claim idempotency.
+    idempotent = {"baton_delete", "baton_memory_forget"}
     for name, model in INPUTS.items():
-        registry.add_tool(Tool(name, model, catalog.DESCRIPTIONS[name], handlers[name],
-                               read_only=name in read_only, destructive=name in destructive))
+        registry.add_tool(Tool(name, model, catalog.DESCRIPTIONS[name], handlers[name], read_only=name in read_only,
+                               destructive=name in destructive, idempotent=name in idempotent))
     registry.add_prompt(Prompt("save", "Save this conversation to Baton so you can continue it later or in another harness.", _save_prompt,
                                [types.PromptArgument(name="target", description="Optional harness that should pick it up, e.g. codex"),
                                 types.PromptArgument(name="focus", description="Optional note on what to emphasise")]))

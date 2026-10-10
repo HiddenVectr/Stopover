@@ -32,13 +32,94 @@ jobs:
           BATON_SCREENSHOT_DIR: ${{ runner.temp }}/screenshots
         run: pytest -q
 
-  docker:
+  windows:
+    # Running directly with Python on Windows is documented, and the data-directory lock has a Windows code path.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.lock
+      - name: Install
+        run: |
+          pip install -r requirements-dev.lock
+          pip install --no-deps -e .
+          python -m playwright install chromium
+      - name: Test
+        run: pytest -q
+
+  minimum-dependencies:
+    # The lowest versions pyproject.toml allows, on the oldest supported Python: a valid install must start and pass.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build the image and check it starts healthy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install the minimum versions
         run: |
-          docker build -t baton:ci .
-          docker run -d --name baton-ci -p 127.0.0.1:8765:8765 baton:ci
-          for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:8765/healthz && exit 0; sleep 1; done
-          docker logs baton-ci; exit 1
+          pip install -c requirements-min.txt -e ".[test]"
+          pip check
+          python -m playwright install --with-deps chromium
+      - name: Test
+        run: pytest -q
+
+  audit:
+    # Known vulnerabilities in the locked production and development dependencies.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit
+      - run: pip-audit --no-deps --disable-pip -r requirements.lock -r requirements-dev.lock
+
+  package:
+    # The wheel and sdist carry the license and README, as Apache-2.0 redistribution requires.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - name: Check the license and description are packaged
+        run: |
+          python - <<'PY'
+          import glob, tarfile, zipfile
+          wheel = zipfile.ZipFile(glob.glob("dist/*.whl")[0])
+          names = wheel.namelist()
+          assert any(n.endswith(".dist-info/licenses/LICENSE") for n in names), names
+          metadata = wheel.read(next(n for n in names if n.endswith(".dist-info/METADATA"))).decode()
+          assert "License-Expression: Apache-2.0" in metadata and "# Baton" in metadata
+          sdist = tarfile.open(glob.glob("dist/*.tar.gz")[0])
+          assert any(n.endswith("/LICENSE") for n in sdist.getnames())
+          print("wheel and sdist include LICENSE and README")
+          PY
+
+  docker:
+    # The image as Compose runs it: read-only filesystem, no capabilities, non-root, a fresh volume, a restart.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start with the Compose restrictions
+        run: |
+          docker compose -p baton-ci up --build -d --wait
+          docker compose -p baton-ci exec -T baton sh -c 'test -f /app/LICENSE && test -f /app/README.md'
+          docker compose -p baton-ci exec -T baton python -c "import importlib.metadata as m; assert 'LICENSE' in m.metadata('baton-inbox').get_all('License-File')"
+      - name: Save a handoff, restart, and read it back
+        run: |
+          docker compose -p baton-ci exec -T baton python -m baton seed-demo
+          docker compose -p baton-ci restart baton
+          docker compose -p baton-ci up -d --wait
+          curl -fsS http://127.0.0.1:8765/api/handoffs?status=all | python3 -c "import json,sys; items=json.load(sys.stdin)['data']['items']; assert len(items) == 1, items; print('kept', items[0]['title'])"
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -p baton-ci logs
+      - name: Clean up
+        if: always()
+        run: docker compose -p baton-ci down -v

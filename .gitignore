@@ -1,9 +1,42 @@
+# Python
 .venv/
+venv/
 __pycache__/
 *.pyc
 *.egg-info/
+build/
+dist/
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets. Commit examples deliberately, e.g. .env.example.
 .env
+.env.*
+!.env.example
+
+# Baton data, backups and exports (they contain your handoffs and personal memories)
 data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*-export.json
+handoff-export*.json
+baton-backup*.tar*
+
+# Test and tool output
 test-results/
+playwright-report/
+
+# Editors and local agent settings
+.idea/
+.vscode/
+.DS_Store
+.claude/
 .omc/
+
+# Local working notes (for example the public-release review); not part of the published project.
+/work/

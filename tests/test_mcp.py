@@ -60,9 +60,9 @@ async def test_real_http_and_stdio_lifecycle(live_server, record):
 @pytest.mark.parametrize("host,origin", [
     ("handoff.example-tailnet.ts.net", None),
     ("handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),
-    ("desktop.example-tailnet.ts.net:8445", "https://other.example.com"),
-    ("localhost:8765", "null"),
-])
+    ("desktop.example-tailnet.ts.net:8445", "https://desktop.example-tailnet.ts.net:8445"),
+    ("localhost:8765", "http://localhost:8765"),
+])  # Foreign and "null" origins are refused: see test_http.py
 async def test_remote_mcp_headers_support_save_and_read(live_server, record, host, origin):
     # Model a reverse proxy forwarding the original Host and Origin to loopback.
     headers = {"host": host}
@@ -99,3 +99,19 @@ async def test_prompts_over_http(live_server, record):
                 assert not resumed.isError, resumed
                 busy = await client.get_prompt("resume", {"id": pushed["id"]})
                 assert "is claimed" in busy.messages[0].content.text
+
+
+def test_tool_annotations_describe_each_tool_accurately():
+    from baton.service import core_registry
+    hints = {name: tool.definition().annotations for name, tool in core_registry().tools.items()}
+    table = {name: (a.readOnlyHint, a.destructiveHint, a.idempotentHint) for name, a in hints.items()}
+    assert table == {
+        "baton_list": (True, False, True), "baton_get": (True, False, True),
+        "baton_memory_read": (True, False, True), "baton_memory_export": (True, False, True),
+        # Two identical saves without an operation_id make two handoffs, so saving is not idempotent.
+        "baton_save": (False, False, False), "baton_claim": (False, False, False),
+        "baton_resume": (False, False, False), "baton_complete": (False, False, False),
+        "baton_memory_update": (False, True, False),
+        "baton_delete": (False, True, True), "baton_memory_forget": (False, True, True),
+    }
+    assert all(a.openWorldHint is False for a in hints.values())

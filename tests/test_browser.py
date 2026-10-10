@@ -3,6 +3,7 @@ import os
 import uuid
 from pathlib import Path
 
+import httpx
 from playwright.sync_api import sync_playwright, expect
 
 from baton.__main__ import call_remote
@@ -30,6 +31,7 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         row = page.locator(".handoff-row").filter(has_text=args["record"]["title"])
         expect(row).to_be_visible()
         page.get_by_role("button", name="Connect your agents").click()
+        expect(page.get_by_role("dialog", name="Connect your agents")).to_be_visible()  # dialogs have accessible names
         expect(page.locator("#mcp-url")).to_have_text(live_server["url"] + "/mcp")
         expect(page.locator("#codex-add")).to_have_text("codex mcp add baton --url " + live_server["url"] + "/mcp")
         expect(page.locator("#setup-dialog")).not_to_contain_text("docker exec")
@@ -38,17 +40,21 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         page.get_by_role("button", name="Close connection instructions").click()
         row.click()
         expect(page.locator("#detail h2")).to_have_text(args["record"]["title"])
+        expect(page.locator("#detail h2")).to_be_focused()  # keyboard and screen-reader users land on what they opened
         expect(page.get_by_role("heading", name="Next steps", exact=True)).to_be_visible()
         expect(page.locator("#detail")).to_contain_text(args["record"]["context"]["background"])
         assert not page.evaluate("Boolean(window.handoffInjected)")
         expect(page.locator("#detail .timeline li")).to_have_count(1)
         page.screenshot(path=str(screenshots / "dashboard-desktop.png"), full_page=True)
+        # An empty search result is not an empty inbox: it says so, and offers to clear the filters.
         page.get_by_label("Search handoffs").fill("missing-record-search")
-        expect(page.get_by_text("No handoffs here yet.")).to_be_visible()
-        page.get_by_label("Search handoffs").fill("")
+        expect(page.get_by_text("No matching handoffs.")).to_be_visible()
+        expect(page.get_by_text("No handoffs here yet.")).to_have_count(0)
+        page.get_by_role("button", name="Clear filters").click()
         expect(row).to_be_visible()
+        expect(page.get_by_label("Search handoffs")).to_have_value("")
         page.get_by_role("button", name="Completed", exact=False).first.click()
-        expect(page.get_by_text("No handoffs here yet.")).to_be_visible()
+        expect(page.get_by_text("No matching handoffs.")).to_be_visible()
         page.locator('[data-status="all"]').click()
         expect(row).to_be_visible()
         page.get_by_role("button", name="Copy ID", exact=True).click()
@@ -292,3 +298,50 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+def test_selecting_another_handoff_never_offers_the_previous_one(live_server, record):
+    """On a slow connection, the old details (and their copy buttons) must not stay up while the new one loads."""
+    ids = []
+    for title in ("First handoff", "Second handoff"):
+        args = {"operation_id": str(uuid.uuid4()), "record": {**record, "title": title}}
+        ids.append(asyncio.run(call_remote(live_server["url"] + "/mcp", "baton_save", args))["data"]["id"])
+    first, second = ids
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        context = browser.new_context(viewport={"width": 1440, "height": 1000}, permissions=["clipboard-read", "clipboard-write"])
+        page = context.new_page()
+        page.goto(f"{live_server['url']}/handoffs/{first}")
+        expect(page.locator("#detail h2")).to_have_text("First handoff")
+        held = []
+        page.route(f"**/api/handoffs/{second}", lambda route: held.append(route))  # hold the second response
+        page.locator(".handoff-row").filter(has_text="Second handoff").click()
+        expect(page.locator("#detail")).to_contain_text("Loading handoff")
+        expect(page.get_by_role("button", name="Copy resume prompt")).to_have_count(0)
+        expect(page.locator("#detail")).not_to_contain_text("First handoff")
+        assert held, "the detail request should be in flight"
+        held[0].continue_()
+        expect(page.locator("#detail h2")).to_have_text("Second handoff")
+        page.get_by_role("button", name="Copy resume prompt").click()
+        assert page.evaluate("navigator.clipboard.readText()") == f"Resume Handoff {second}"
+        browser.close()
+
+
+def test_refresh_keeps_keyboard_focus_on_the_list(live_server, record):
+    args = {"operation_id": str(uuid.uuid4()), "record": {**record, "title": "Focused handoff"}}
+    focused_id = asyncio.run(call_remote(live_server["url"] + "/mcp", "baton_save", args))["data"]["id"]
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.clock.install()
+        page.goto(live_server["url"])
+        row = page.locator(f'.handoff-row[data-key="{focused_id}"]')
+        row.focus()
+        # Another agent saves a handoff; the next refresh rebuilds the list.
+        more = {"operation_id": str(uuid.uuid4()), "record": {**record, "title": "Arrived during refresh"}}
+        httpx.post(live_server["url"] + "/mcp", headers={"accept": "application/json, text/event-stream"},
+                   json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "baton_save", "arguments": more}})
+        page.clock.run_for(16000)
+        expect(page.locator(".handoff-row").filter(has_text="Arrived during refresh")).to_be_visible()
+        assert page.evaluate("document.activeElement.dataset.key") == focused_id
+        browser.close()

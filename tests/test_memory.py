@@ -195,7 +195,7 @@ async def test_memory_http_stdio_round_trip(live_server):
                 assert tools['baton_memory_export'].annotations.readOnlyHint
                 assert tools['baton_memory_forget'].annotations.destructiveHint
                 assert all(len(tools[name].description) < 1000 for name in tools if 'memory' in name)
-                assert not tools['baton_memory_update'].annotations.destructiveHint
+                assert tools['baton_memory_update'].annotations.destructiveHint  # it can overwrite a memory
                 assert 'ALL' in (await codex.get_prompt('memory-update')).messages[0].content.text
                 saved = await codex.call_tool('baton_memory_update', update(entry()))
                 assert not saved.isError
