@@ -125,7 +125,8 @@ def capture(base: str, first_id: str):
         browser = p.chromium.launch()
 
         def new_page(**options):
-            page = browser.new_page(reduced_motion="reduce", **options)  # no fade-ins mid-capture
+            # Dark theme for the docs; no fade-ins mid-capture.
+            page = browser.new_page(color_scheme="dark", reduced_motion="reduce", **options)
             page.route(SHOWN + "/**", lambda route: route.fulfill(response=route.fetch(url=route.request.url.replace(SHOWN, base))))
             return page
 
