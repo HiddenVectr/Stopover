@@ -16,7 +16,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -36,7 +36,7 @@ jobs:
     # Running directly with Python on Windows is documented, and the data-directory lock has a Windows code path.
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -54,7 +54,7 @@ jobs:
     # The lowest versions pyproject.toml allows, on the oldest supported Python: a valid install must start and pass.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -70,7 +70,7 @@ jobs:
     # Known vulnerabilities in the locked production and development dependencies.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -81,7 +81,7 @@ jobs:
     # The wheel and sdist carry the license and README, as Apache-2.0 redistribution requires.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -105,7 +105,7 @@ jobs:
     # The image as Compose runs it: read-only filesystem, no capabilities, non-root, a fresh volume, a restart.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build and start with the Compose restrictions
         run: |
           docker compose -p stopover-ci up --build -d --wait
