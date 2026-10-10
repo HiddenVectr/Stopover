@@ -12,7 +12,7 @@ import stopover.memory
 import stopover.service
 from stopover.context import RequestContext
 from stopover.registry import Tool
-from stopover.server import create_app, host_allowed
+from stopover.server import Brand, create_app, host_allowed
 from stopover.service import core_registry
 from stopover.store import Store
 
@@ -130,3 +130,17 @@ def test_mcp_challenge_points_clients_at_oauth_metadata(tmp_path):
         assert response.status_code == 401
         assert response.headers["www-authenticate"] == 'Bearer resource_metadata="https://127.0.0.1:8765/.well-known/oauth-protected-resource/mcp"'
         assert client.get("/api/handoffs").headers["www-authenticate"] == "Bearer"  # only /mcp gets the challenge
+
+
+def test_brand_replaces_the_dashboard_wording_only_when_given(tmp_path):
+    with TestClient(create_app(tmp_path / "plain"), base_url="http://127.0.0.1") as client:
+        page = client.get("/").text
+    assert "<title data-brand=\"title\">Stopover · Agent inbox</title>" in page and "Self-hosted inbox" in page
+    brand = Brand(name="Hosted & Co", title="Hosted & Co · Inbox", status="Hosted inbox", workspace="Your workspace",
+                  workspace_detail="Signed in")
+    with TestClient(create_app(tmp_path / "branded", brand=brand), base_url="http://127.0.0.1") as client:
+        page = client.get("/").text
+        assert client.get("/handoffs/abc").text == page  # every dashboard route gets the same branded page
+    assert '<span data-brand="name">Hosted &amp; Co</span>' in page and "Hosted &amp; Co · Inbox</title>" in page
+    assert "Hosted inbox" in page and "Your workspace" in page and "Signed in" in page
+    assert "Self-hosted inbox" not in page and "Local workspace" not in page and ">Stopover<" not in page

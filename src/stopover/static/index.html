@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#f6f7f4" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f1513" media="(prefers-color-scheme: dark)">
-  <title>Stopover · Agent inbox</title>
+  <title data-brand="title">Stopover · Agent inbox</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%231e5944'/%3E%3Cpath d='M9 15h20m-6-6 6 6-6 6M31 26H11m6-6-6 6 6 6' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/assets/style.css">
   <script src="/assets/app.js" defer></script>
@@ -15,15 +15,15 @@
   <div id="app" class="app">
     <aside class="sidebar">
       <div class="sidebar-top">
-        <a href="/" class="brand"><span class="brand-icon" aria-hidden="true">⇄</span>Stopover</a>
+        <a href="/" class="brand"><span class="brand-icon" aria-hidden="true">⇄</span><span data-brand="name">Stopover</span></a>
         <button id="setup-button" class="button primary connect-button" type="button">Connect your agents</button>
         <button id="account-button" class="account-button" type="button" aria-label="Account" aria-haspopup="dialog"></button>
       </div>
       <div class="workspace">
         <span class="workspace-avatar" id="workspace-avatar">L</span>
-        <div><strong id="workspace-name">Local workspace</strong><span id="workspace-detail">One machine. All your agents.</span></div>
+        <div><strong id="workspace-name" data-brand="workspace">Local workspace</strong><span id="workspace-detail" data-brand="workspace_detail">One machine. All your agents.</span></div>
       </div>
-      <nav class="nav" aria-label="Stopover navigation">
+      <nav class="nav" aria-label="Main navigation">
         <p class="nav-label">Handoffs</p>
         <button class="nav-item active" data-status="all"><span>All handoffs</span><span class="count" id="count-all">0</span></button>
         <button class="nav-item" data-status="available"><span><i class="dot available"></i>Ready to resume</span><span class="count" id="count-available">0</span></button>
@@ -35,7 +35,7 @@
       <div class="sidebar-bottom">
         <nav id="host-links" class="host-links" aria-label="Account" hidden></nav>
         <button id="signout-button" class="subtle-button" type="button" hidden>Sign out</button>
-        <p class="local-status"><i class="dot available"></i><span>Self-hosted inbox</span></p>
+        <p class="local-status"><i class="dot available"></i><span data-brand="status">Self-hosted inbox</span></p>
       </div>
     </aside>
 
@@ -121,7 +121,7 @@
   <dialog id="signin-dialog" aria-labelledby="signin-title">
     <form id="signin-form" method="dialog">
       <div class="dialog-heading"><h2 id="signin-title">Sign in</h2></div>
-      <p class="muted">This Stopover server requires an access token. It is stored in this browser until you sign out.</p>
+      <p class="muted">This <span data-brand="name">Stopover</span> server requires an access token. It is stored in this browser until you sign out.</p>
       <label class="signin-label" for="signin-token">Access token</label>
       <input id="signin-token" class="signin-input" type="password" autocomplete="current-password" required>
       <p id="signin-error" class="error" role="alert" hidden></p>
