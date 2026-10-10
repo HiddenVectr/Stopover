@@ -25,16 +25,46 @@ def test_local_dashboard_and_api_need_no_token(tmp_path):
 
 @pytest.mark.parametrize("base_url,origin", [
     ("https://handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),
-    ("https://handoff.example-tailnet.ts.net:8445", "https://other.example.com"),
-    ("http://localhost:8765", "null"),
+    ("https://handoff.example-tailnet.ts.net:8445", "https://handoff.example-tailnet.ts.net:8445"),
+    ("http://localhost:8765", "http://localhost:8765"),
+    ("http://handoff.example-tailnet.ts.net", "https://handoff.example-tailnet.ts.net"),  # TLS ends at the proxy
 ])
-def test_remote_dashboard_and_api_accept_host_and_origin(tmp_path, base_url, origin):
+def test_remote_dashboard_and_api_accept_their_own_origin(tmp_path, base_url, origin):
     with TestClient(create_app(tmp_path), base_url=base_url, headers={"origin": origin}) as client:
         assert client.get("/").status_code == 200
         assert client.get("/healthz").json()["ready"]
         assert client.get("/api/handoffs").json()["data"]["items"] == []
         assert client.get("/api/overview").status_code == 200
         assert client.post("/mcp", content=b"x" * 65537).status_code == 413
+
+
+@pytest.mark.parametrize("origin", ["https://attacker.example", "null", "http://localhost:9999", "https://evil.ts.net",
+                                    "https://localhost:8765/path", "localhost:8765", "javascript:alert(1)"])
+def test_foreign_or_invalid_origins_cannot_use_mcp_or_the_api(tmp_path, record, origin):
+    app = create_app(tmp_path)
+    with TestClient(app, base_url="http://localhost:8765", headers={"origin": origin}) as client:
+        saved = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                          "params": {"name": "baton_save", "arguments": {"record": record}}},
+                            headers={"accept": "application/json, text/event-stream"})
+        assert saved.status_code == 403 and saved.json() == {"error": "Origin not allowed"}
+        assert client.get("/api/handoffs").status_code == 403
+        assert app.state.service.execute("baton_list", {"status": "all"})["data"]["items"] == []  # nothing was saved
+
+
+def test_native_clients_without_origin_are_unaffected(tmp_path, record):
+    with TestClient(create_app(tmp_path), base_url="http://localhost:8765") as client:
+        saved = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                          "params": {"name": "baton_save", "arguments": {"record": record}}},
+                            headers={"accept": "application/json, text/event-stream"})
+        assert saved.status_code == 200 and saved.json()["result"]["structuredContent"]["ok"]
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8765/public?x=", "[::1]/public?x=", "localhost:", "localhost:99999",
+                                  "user@localhost", "local host", "[::1", "localhost:80:80", "a..ts.net", ""])
+@pytest.mark.parametrize("allowed", [None, ["*"]])
+def test_malformed_host_headers_are_refused_even_with_a_wildcard(tmp_path, host, allowed):
+    with TestClient(create_app(tmp_path, allowed_hosts=allowed), base_url="http://localhost:8765") as client:
+        assert client.get("/api/handoffs", headers={"host": host}).status_code == 403
 
 
 def test_cross_site_navigations_are_allowed_but_not_requests(tmp_path):

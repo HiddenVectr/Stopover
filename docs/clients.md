@@ -1,4 +1,4 @@
-# Connect an AI harness
+# Connect an AI agent
 
 Baton works with any MCP client that supports **Streamable HTTP**. This page has setup steps for each client, how to verify the connection, and troubleshooting.
 
@@ -154,7 +154,7 @@ mcp_servers:
     url: "http://127.0.0.1:8765/mcp"
 ```
 
-Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_save`. Ask it to list handoffs to verify a tool call, then try the [save and resume workflow](../README.md#quickstart).
+Replace the URL with your Tailscale endpoint when hosting remotely. Start a fresh `hermes chat` session or run `/reload-mcp` in an existing session. Hermes exposes tools with names such as `mcp_baton_baton_save`. Ask it to list handoffs to verify a tool call, then try the [save and resume workflow](../README.md#save-and-resume).
 
 References: [Hermes MCP guide](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp/), [Hermes CLI reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands/).
 
@@ -184,7 +184,7 @@ This setup follows Meta's documented keys (`transport`, `url`, `mode`); it has n
 
 Add a server named `baton`, select **Streamable HTTP**, enter `http://127.0.0.1:8765/mcp` or your Tailscale HTTPS endpoint, and leave authentication set to **None**. No command, token, or authorization header is needed.
 
-[clients/generic-http.json](../clients/generic-http.json) illustrates a common JSON configuration shape. Adapt its wrapper to your harness; MCP does not define a universal client configuration file. Clients must support Streamable HTTP; legacy SSE-only clients need a compatible adapter.
+[clients/generic-http.json](../clients/generic-http.json) illustrates a common JSON configuration shape. Adapt its wrapper to your agent; MCP does not define a universal client configuration file. Clients must support Streamable HTTP; legacy SSE-only clients need a compatible adapter.
 
 ## Verify a connection
 
@@ -199,12 +199,12 @@ An empty successful result is fine. A configured-server listing alone does not p
 ## Troubleshooting connections
 
 - **Client asks for a token:** remove old `bearer_token_env_var` settings or `Authorization` headers, or remove and re-add the registration using the commands above. If the local server itself still returns 401, rebuild it with `docker compose up --build -d`.
-- **Connection refused:** verify the server is running and the URL is reachable from the harness. `127.0.0.1` always refers to the client's own machine or runtime; a remote harness needs a reachable server URL.
-- **HTTP 403:** Baton still rejects browser requests marked `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `BATON_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
+- **Connection refused:** verify the server is running and the URL is reachable from the agent. `127.0.0.1` always refers to the client's own machine or runtime; a remote agent needs a reachable server URL.
+- **HTTP 403:** Baton rejects browser requests from other sites: an `Origin` that isn't the Baton server, or `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `BATON_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
 - **Server registered but tools missing:** reload the MCP configuration or start a fresh client session, check that the server is enabled, and approve project configuration where required.
 - **Client still tries to run Docker:** remove the previous `command` and `args` entry and use the HTTP example for that client. The HTTP connection does not execute anything on the client.
 - **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 baton` on the server.
 
-## Compatibility notes
+## Legacy stdio clients
 
-The setup steps above are not an exhaustive compatibility list, and an example does not mean every client has been tested end to end. Clients must support Streamable HTTP. The older stdio bridge (`python -m baton bridge`) remains for clients that can only launch a command, but direct HTTP is the documented setup.
+The older stdio bridge (`python -m baton bridge`) remains for clients that can only launch a command, but direct HTTP is the documented setup.

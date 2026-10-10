@@ -123,16 +123,41 @@ async function overview() {
   options('target-filter', data.targets, 'Any recipient');
 }
 
+function filtered() {
+  return state.status !== 'all' || ['search', 'project-filter', 'target-filter'].some((id) => $(id).value.trim());
+}
+
+function clearFilters() {
+  for (const id of ['search', 'project-filter', 'target-filter']) $(id).value = '';
+  document.querySelector('[data-status="all"]').click();
+}
+
+// Rebuilding a list (selection, or the 15-second refresh) must not lose keyboard focus or the list's scroll position.
+function keepPlace(container, render) {
+  const focused = container.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  const scroller = container.closest('.list') || container;
+  const top = scroller.scrollTop;
+  render();
+  scroller.scrollTop = top;
+  if (focused) container.querySelector(`[data-key="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+}
+
 function renderList() {
   const container = $('handoff-list');
+  keepPlace(container, () => renderRows(container));
+}
+
+function renderRows(container) {
   container.replaceChildren();
   if (!state.items.length) {
     const empty = el('div', 'empty-list');
-    empty.append(el('strong', '', 'No handoffs here yet.'), el('p', '', 'Ask your AI agent to save a handoff. Its context will appear here, ready for the next session.'), button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
+    if (filtered()) empty.append(el('strong', '', 'No matching handoffs.'), el('p', '', 'Nothing matches this search or filter.'), button('Clear filters', 'button secondary', clearFilters));
+    else empty.append(el('strong', '', 'No handoffs here yet.'), el('p', '', 'Ask your AI agent to save a handoff. Its context will appear here, ready for the next session.'), button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
     container.append(empty);
   }
   for (const item of state.items) {
-    const row = button('', 'handoff-row' + (item.id === state.selected ? ' selected' : ''), () => choose(item.id));
+    const row = button('', 'handoff-row' + (item.id === state.selected ? ' selected' : ''), () => choose(item.id, true, true));
+    row.dataset.key = item.id;
     row.setAttribute('aria-pressed', String(item.id === state.selected));
     const top = el('div', 'row-top');
     const when = el('time', '', relative(item.created_at));
@@ -160,10 +185,14 @@ async function loadList(append = false) {
   try {
     const response = await api('/api/handoffs?' + query);
     if (generation !== state.generation) return;
-    state.items = append ? [...state.items, ...response.data.items] : response.data.items;
+    const items = append ? [...state.items, ...response.data.items] : response.data.items;
+    const view = JSON.stringify([items, response.data.next_cursor, filtered(), state.selected]);
+    const changed = view !== state.view;
+    state.view = view;
+    state.items = items;
     state.cursor = response.data.next_cursor;
     state.pages = append ? state.pages + 1 : 1;
-    renderList();
+    if (changed) renderList();
     $('sync-state').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     error();
   } catch (exception) { error(exception.message); }
@@ -213,7 +242,9 @@ function renderDetail(data) {
   const saved = el('time', '', 'Saved ' + since(data.created_at));
   saved.dateTime = data.created_at;
   saved.title = date(data.created_at);
-  status.append(badge(data.effective_status), saved);
+  const statusBadge = badge(data.effective_status);
+  if (data.completion) statusBadge.textContent = `Completed · ${data.completion.outcome}`;
+  status.append(statusBadge, saved);
   const route = el('p', 'detail-route');
   route.append(el('strong', '', record.source.client), el('span', '', ' → '), el('strong', '', record.target_client || 'any agent'));
   if (record.project_key) route.append(el('span', 'project-tag', record.project_key));
@@ -221,7 +252,9 @@ function renderDetail(data) {
   actions.append(button('Copy resume prompt', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))));
   const id = el('div', 'id-row');
   id.append(el('code', '', data.id), button('Copy ID', 'copy-small', () => copy(data.id)));
-  header.append(status, el('h2', '', record.title), route, actions, id);
+  const title = el('h2', '', record.title);
+  title.tabIndex = -1;
+  header.append(status, title, route, actions, id);
   if (data.claim.holder_label && data.claim.active) {
     header.append(el('p', 'claim-note', `In progress with ${data.claim.holder_label} until ${date(data.claim.expires_at)}.`));
   }
@@ -279,6 +312,7 @@ function renderDetail(data) {
   raw.append(el('summary', '', 'Full record · schema ' + record.schema_version), el('pre', '', JSON.stringify(data, null, 2)));
   content.append(raw, el('p', 'trust-note', data.trust_notice));
   panel.append(header, content);
+  if (state.focusDetail) { state.focusDetail = false; title.focus({ preventScroll: !narrow() }); }
   loadEvents(data.id, activity).catch((exception) => { activity.append(el('p', 'error', exception.message)); });
 }
 
@@ -312,11 +346,20 @@ async function detail(id, silent = false) {
   }
 }
 
-function choose(id, updateURL = true) {
+function loading(text) {
+  const node = el('div', 'empty-detail');
+  node.setAttribute('role', 'status');
+  node.append(el('p', '', text));
+  return node;
+}
+
+function choose(id, updateURL = true, focusDetail = false) {
   if (!state.selected) state.listScroll = scrollY;
   state.selected = id;
   state.detail = null;
+  state.focusDetail = focusDetail;
   if (updateURL) history.pushState({}, '', '/handoffs/' + encodeURIComponent(id));
+  $('detail').replaceChildren(loading('Loading handoff…'));
   renderList();
   syncPanes();
   detail(id);
@@ -340,6 +383,7 @@ function emptyDetail() {
 
 function closeDetail() {
   const position = state.listScroll || 0;
+  const previous = state.selected;
   state.selected = null;
   state.detail = null;
   history.pushState({}, '', '/');
@@ -347,6 +391,7 @@ function closeDetail() {
   renderList();
   syncPanes();
   if (narrow()) scrollTo({ top: position, behavior: 'instant' });
+  $('handoff-list').querySelector(`[data-key="${CSS.escape(previous || '')}"]`)?.focus({ preventScroll: true });
 }
 
 async function refresh() {
@@ -495,6 +540,10 @@ function revealActiveChip() {
 
 function renderMemories() {
   const list = $('memory-list');
+  keepPlace(list, () => renderMemoryRows(list));
+}
+
+function renderMemoryRows(list) {
   list.replaceChildren();
   if (!memories.items.length) {
     const empty = el('div', 'empty-list');
@@ -504,6 +553,7 @@ function renderMemories() {
   }
   for (const item of memories.items) {
     const row = button('', 'handoff-row memory-row' + (item.key === memories.selected ? ' selected' : ''), () => chooseMemory(item.key));
+    row.dataset.key = item.key;
     row.setAttribute('aria-pressed', String(item.key === memories.selected));
     const top = el('div', 'row-top');
     top.append(el('span', 'row-title mono-title', item.key), el('time', '', relative(item.updated_at)));
@@ -525,10 +575,14 @@ async function loadMemories(append = false) {
   try {
     const response = await api('/api/memories?' + query);
     if (generation !== memories.generation) return;
-    memories.items = append ? [...memories.items, ...response.data.items] : response.data.items;
+    const items = append ? [...memories.items, ...response.data.items] : response.data.items;
+    const view = JSON.stringify([items, response.data.next_cursor, $('memory-search').value, $('memory-category').value, memories.selected]);
+    const changed = view !== memories.view;
+    memories.view = view;
+    memories.items = items;
     memories.cursor = response.data.next_cursor;
     memories.pages = append ? memories.pages + 1 : 1;
-    renderMemories();
+    if (changed) renderMemories();
     memoryError();
     $('memory-sync').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   } catch (exception) { if (generation === memories.generation) memoryError(exception.message); }
@@ -591,7 +645,7 @@ function chooseMemory(key, updateURL = true) {
   memories.detail = null;
   if (updateURL) history.pushState({}, '', '/memories/' + encodeURIComponent(key));
   renderMemories();
-  $('memory-detail').replaceChildren(el('div', 'empty-detail', 'Loading memory…'));
+  $('memory-detail').replaceChildren(loading('Loading memory…'));
   syncPanes();
   memoryDetail(key);
   if (narrow()) scrollTo({ top: 0, behavior: 'instant' });
