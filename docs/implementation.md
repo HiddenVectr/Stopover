@@ -12,10 +12,10 @@ The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build 
 
 Design notes:
 
-- A few nonessential source fields now have stable defaults, so agents can create a concise handoff without inventing metadata. Objective, current state, next steps and acceptance criteria remain required.
-- Local and private network access require no Stopover token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
-- The dashboard adds read-only HTTP endpoints and opens without a login. Agent writes remain MCP-only.
-- Count limits protect the small local store; an exact 1 GiB filesystem quota is not implemented. Disk-full errors fail the transaction; monitor the volume and back it up.
+- Nonessential source fields have stable defaults, so agents can save a concise handoff without inventing metadata. Objective, current state, next steps and acceptance criteria are required.
+- Connections need no Stopover token. Claim tokens coordinate who is working on a handoff; they are unrelated to connection authentication.
+- The dashboard reads through GET-only HTTP endpoints and opens without a login. Agents make every change through MCP.
+- Count limits protect the small local store; there is no filesystem quota. A full disk fails the transaction, so monitor the volume and back it up.
 - Tests cover the implemented contracts; there is no broad fault-injection or performance test matrix yet.
 
 Source records are immutable. A completed record remains visible and browsable. The service does not transfer private model reasoning or assume that a source agent's text authorizes recipient actions.
@@ -44,17 +44,17 @@ A hosted build depends on this package and supplies its own `Backend` (for examp
 
 ## Personal memory implementation
 
-`memory.py` holds the personal-memory rules; the backend stores memory rows, a global monotonic revision, and separate idempotency receipts to the existing SQLite database. Initialization is additive for existing schema-2 stores. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
+Personal memory is a separate feature from handoffs (see the [user guide](memory.md)), sharing only the database and request handling. `memory.py` holds its rules; the backend stores memory rows, a store-wide monotonic revision, and the memory idempotency receipts in the same SQLite database. Updates and explicit forgetting commit atomically under the existing owner/thread locks. Revisions detect concurrent corrections; stable normalized topic keys prevent duplicate writes to the same topic. Forgetting removes the body, evidence, and source; only minimal deletion markers remain. No historical memory bodies are stored in receipts. Personal memories are independent of task retention and claims.
 
 Read/export pagination binds a cursor to its filters and the first page's store revision, which every page reports as the checkpoint. Concurrent writes do not abort pagination; they carry higher revisions, so the next incremental read returns them. Incremental reads include deleted IDs, including through filters where erased content cannot be matched. Exports are paginated and expose a completion flag and continuation cursor.
 
 The full memory workflow is provided once at server initialization and in the `memory-update` / `memory-import` prompts; memory tool descriptions are short contracts, keeping the tool list small. The harness extracts all available personal knowledge, reconciles it remotely, and reports coverage. The MCP does not inspect the harness context, access harness files, or install local adapters. There is no additional authentication or per-user partitioning. Local remembering, if chosen, remains the harness's responsibility.
 
-The existing dashboard adds a Personal memories view with full-text display, topic/content search, category filters, provenance, timestamps, revision, direct links, pagination, and refresh. GET-only `/api/memories` and `/api/memories/{key}` use the same store validation. All content remains inert text.
+The dashboard's Personal memories view has with full-text display, topic/content search, category filters, provenance, timestamps, revision, direct links, pagination, and refresh. GET-only `/api/memories` and `/api/memories/{key}` use the same store validation. All content remains inert text.
 
-## Verification
+## Tests
 
-All tests pass, including browser coverage. Tests exercise credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and allowed remote Host/Origin headers over real MCP HTTP connections, with initialization, tool discovery, saving and retrieval. Unknown and malformed hosts are rejected on every route (malformed ones even when the allowlist is `*`), and the allowlist can be extended. Foreign, invalid and `null` `Origin` headers are rejected for MCP and the API; requests without `Origin` (native clients) are accepted. Cross-site Fetch Metadata rejection and the body limit remain covered. A deployed Tailscale endpoint and an interactive Hermes Agent session have not been tested here; their setup instructions were checked against upstream documentation.
+The test suite includes browser tests of the dashboard. It exercises credential-free API/dashboard access, the HTTP/stdio handoff lifecycle, and allowed remote Host/Origin headers over real MCP HTTP connections, with initialization, tool discovery, saving and retrieval. Unknown and malformed hosts are rejected on every route (malformed ones even when the allowlist is `*`), and the allowlist can be extended. Foreign, invalid and `null` `Origin` headers are rejected for MCP and the API; requests without `Origin` (native clients) are accepted. Cross-site Fetch Metadata rejection and the body limit remain covered. The Tailscale, Hermes Agent and Muse Code setup instructions follow upstream documentation but are not covered by automated tests.
 
 Dashboard screenshots: [desktop](images/dashboard.png), [mobile](images/dashboard-mobile.png). Regenerate all images with `.venv/bin/python scripts/screenshots.py`.
 

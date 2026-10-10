@@ -1,6 +1,8 @@
 # Using Stopover
 
-Stopover gives your connected agents a shared place to save task summaries and personal context. The dashboard lets you browse and copy them; you make changes through an agent.
+This page covers **handoffs**: saving a task in one agent and continuing it in another. Stopover's other feature, sharing your preferences and context between agents, has its own page: [personal memory](memory.md).
+
+The dashboard lets you browse handoffs and copy resume prompts; you make changes through an agent.
 
 ## Continue work in another agent
 
@@ -38,22 +40,6 @@ For a clearly labeled example, run `docker exec stopover python -m stopover seed
 
 Claims coordinate agents, but do not lock project files. A claim can expire during long work, so agents should renew it if needed. Completion should describe observed results; a saved summary alone does not prove the work is finished.
 
-## Personal memories
-
-![Personal memories with their category, content, and source](images/memories.png)
-
-In a connected agent, say **“Update my Stopover memory.”** It gathers accessible personal context and reconciles it with existing memories. To save one fact or preference, name it explicitly. Review the agent's confirmation to check what it saved.
-
-In another agent, say **“Import my Stopover memory.”** It retrieves the shared context. Permanent storage in that agent depends on its own memory support.
-
-Open **Personal memories** to browse the saved topics and their sources. To change one, tell an agent, for example:
-
-> Correct my Stopover memory: I prefer concise answers.
-
-> Forget the Stopover memory about my old project.
-
-Forgetting removes active content from Stopover. Other agents must sync to learn about the deletion; old exports and backups can still contain it.
-
 ## Optional shortcuts
 
 Clients that support MCP prompts show Stopover's prompts as commands. In Claude Code they appear as slash commands:
@@ -64,11 +50,11 @@ Clients that support MCP prompts show Stopover's prompts as commands. In Claude 
 | `/mcp__stopover__resume <id>` | Claims the handoff and continues it. If it is already claimed or completed, the agent reads and summarises it instead. |
 | `/mcp__stopover__inbox` | Lists handoffs that are ready to resume and asks which one to pick. |
 
-Other clients name prompts differently; the plain-language requests above work everywhere.
+Other clients name prompts differently; the plain-language requests above work everywhere. The memory commands are listed in [personal memory](memory.md#shortcuts).
 
 ## Important limits
 
-All users of one Stopover server share the same handoffs and memories. Keep it on localhost or an appropriately restricted private network.
+All users of one Stopover server share the same handoffs and personal memories. Keep it on localhost or an appropriately restricted private network.
 
 Do not save secrets. Your receiving agent may send context to its model provider. Handoffs are summaries, not complete conversation exports or transfers of past permission.
 

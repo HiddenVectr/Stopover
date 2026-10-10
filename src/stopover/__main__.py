@@ -36,7 +36,7 @@ def main():
     serve.add_argument("--port", type=int, default=8765)
     sub.add_parser("bridge", help="Serve stdio by forwarding to the running service")
     sub.add_parser("seed-demo", help="Explicitly add one synthetic welcome handoff")
-    imp = sub.add_parser("import", help="Import a push request through MCP (does not open SQLite)")
+    imp = sub.add_parser("import", help="Import a save request through MCP (does not open SQLite)")
     imp.add_argument("file", help="JSON file path, or - to read stdin")
     exp = sub.add_parser("export", help="Export a full archival envelope through MCP")
     exp.add_argument("id")

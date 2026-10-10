@@ -21,9 +21,7 @@ For a server on another machine, see [Tailscale deployment](remote-http.md).
 
 Choose your client: [Codex](#codex), [Claude Code](#claude-code), [Cursor](#cursor), [OMP / Oh My Pi](#omp--oh-my-pi), [Hermes Agent](#hermes-agent), [Muse Code (Meta)](#muse-code-meta), or [generic MCP client](#generic-mcp-client).
 
-For localhost or Tailscale, provide only the MCP URL. Remove old `bearer_token_env_var` settings and `Authorization` headers from existing Stopover registrations.
-
-Use the add command first where shown below; editing the configuration file is an alternative. Choose one method per client. When editing files, merge the example into existing configuration. Replace any old `handoff` entry using `command` and `args`; do not combine command-based and URL-based settings or create a duplicate registration.
+Use the add command where one is shown below; editing the configuration file is an alternative. Choose one method per client. When editing files, merge the example into your existing configuration rather than replacing it, and don't register Stopover twice.
 
 ## Codex
 
@@ -188,7 +186,7 @@ Add a server named `stopover`, select **Streamable HTTP**, enter `http://127.0.0
 
 ## Verify a connection
 
-The client should discover eleven tools: the seven task tools `stopover_save`, `stopover_list`, `stopover_get`, `stopover_claim`, `stopover_resume`, `stopover_complete`, and `stopover_delete`, plus `stopover_memory_read`, `stopover_memory_update`, `stopover_memory_forget`, and `stopover_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
+The client should discover eleven tools: the seven handoff tools `stopover_save`, `stopover_list`, `stopover_get`, `stopover_claim`, `stopover_resume`, `stopover_complete`, and `stopover_delete`, plus the four [personal memory](memory.md) tools `stopover_memory_read`, `stopover_memory_update`, `stopover_memory_forget`, and `stopover_memory_export`. Five prompts are available: `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Some clients prefix tool names with the server name.
 
 Ask the agent:
 
@@ -198,11 +196,11 @@ An empty successful result is fine. A configured-server listing alone does not p
 
 ## Troubleshooting connections
 
-- **Client asks for a token:** remove old `bearer_token_env_var` settings or `Authorization` headers, or remove and re-add the registration using the commands above. If the local server itself still returns 401, rebuild it with `docker compose up --build -d`.
+- **Client asks for a token or login:** Stopover needs none. Remove any `bearer_token_env_var` setting or `Authorization` header from the registration, or remove and re-add it with the commands above.
 - **Connection refused:** verify the server is running and the URL is reachable from the agent. `127.0.0.1` always refers to the client's own machine or runtime; a remote agent needs a reachable server URL.
 - **HTTP 403:** Stopover rejects browser requests from other sites: an `Origin` that isn't the Stopover server, or `Sec-Fetch-Site: cross-site`. Open the dashboard directly at its Serve URL. A 403 saying `Host not allowed` means the server was reached by a name or IP outside its allowlist; add it to `STOPOVER_ALLOWED_HOSTS`. For remote connectivity problems, check Tailscale access rules and `tailscale serve status`.
 - **Server registered but tools missing:** reload the MCP configuration or start a fresh client session, check that the server is enabled, and approve project configuration where required.
-- **Client still tries to run Docker:** remove the previous `command` and `args` entry and use the HTTP example for that client. The HTTP connection does not execute anything on the client.
+- **Client tries to run a command:** the registration is command-based (`command` and `args`). Replace it with the HTTP example for that client; the HTTP connection runs nothing on the client.
 - **Server diagnostics:** the operator can run `docker compose ps` and `docker logs --tail 50 stopover` on the server.
 
 ## Legacy stdio clients

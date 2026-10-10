@@ -446,8 +446,8 @@ function updateAuthUI() {
     : signedIn ? `export STOPOVER_TOKEN=YOUR_TOKEN\ncodex mcp add stopover --url ${mcpUrl} --bearer-token-env-var STOPOVER_TOKEN` : `codex mcp add stopover --url ${mcpUrl}`;
   $('claude-add').textContent = `claude mcp add --scope user --transport http stopover ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
   $('setup-intro').textContent = oauth ? 'Add this MCP server to your agent. The first time it connects, it opens your browser to sign in; there is no token to copy. In Claude Code, run /mcp and choose Authenticate if it asks.'
-    : signedIn ? 'Add this Streamable HTTP MCP server to your harness. Requests need your access token (replace YOUR_TOKEN).'
-    : 'Add this Streamable HTTP MCP server to your harness. No token or login is needed.';
+    : signedIn ? 'Add this Streamable HTTP MCP server to your agent. Requests need your access token (replace YOUR_TOKEN).'
+    : 'Add this Streamable HTTP MCP server to your agent. No token or login is needed.';
   $('setup-auth').textContent = oauth ? 'In Cursor, OMP, Hermes Agent, or another client that supports MCP sign-in, add an HTTP server with the URL above. For clients without sign-in, create an access token and send it as Authorization: Bearer.'
     : signedIn ? 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and the header Authorization: Bearer YOUR_TOKEN.'
     : 'In Cursor, OMP, Hermes Agent, or another compatible client, add an HTTP server with the URL above and authentication set to None.';
@@ -548,7 +548,7 @@ function renderMemoryRows(list) {
   if (!memories.items.length) {
     const empty = el('div', 'empty-list');
     const filtered = $('memory-search').value || $('memory-category').value;
-    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI harness “update my Stopover memory” to save what it knows about you.'));
+    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI agent “update my Stopover memory” to save what it knows about you.'));
     list.append(empty);
   }
   for (const item of memories.items) {
@@ -604,7 +604,7 @@ function renderMemoryDetail(item) {
   }
   const content = el('div', 'detail-content');
   if (item.deleted) {
-    textSection(content, 'Forgotten', 'This memory was removed from Stopover. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
+    textSection(content, 'Forgotten', 'This memory was removed from Stopover. Its content and evidence are no longer stored. Other agents learn about the deletion the next time they import your memory.');
   } else {
     textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
     textSection(content, 'Original source', item.source.client);
@@ -618,7 +618,7 @@ function renderMemoryDetail(item) {
   textSection(content, 'Created', date(item.created_at));
   textSection(content, 'Revision', String(item.revision));
   textSection(content, 'Memory ID', item.id);
-  content.append(el('p', 'trust-note', 'Ask your harness to correct or forget a memory. Stopover shares personal context; each harness decides whether to remember it locally.'));
+  content.append(el('p', 'trust-note', 'Ask any agent to correct or forget a memory. Stopover shares personal context; each agent decides whether to remember it locally.'));
   panel.append(header, content);
 }
 

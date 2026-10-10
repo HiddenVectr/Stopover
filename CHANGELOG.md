@@ -1,11 +1,16 @@
 # Changelog
 
-All notable changes to Stopover (called Baton until 0.13.0, and Handoff before that). Versions follow [semantic versioning](https://semver.org/). Baton is pre-1.0, so a
+All notable changes to Stopover (called Baton until 0.13.0, and Handoff before that). Versions follow [semantic versioning](https://semver.org/). Stopover is pre-1.0, so a
 minor release (0.x) can include breaking changes, for MCP clients or for hosts using the extension API (`Backend`,
 `RequestContext`, the registry and `create_app` hooks). Every breaking change is marked **Breaking** here, with what
 to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
+
+- Docs: personal memory has its own guide, [docs/memory.md](docs/memory.md), explaining how it differs from handoffs, what a memory holds, and how correcting and forgetting work. The README and usage guide present handoffs and personal memory as two separate features.
+- Agents are told up front that handoffs and personal memories are separate features; memories have no claims.
+- The dashboard says "agent" instead of "harness".
+- Docs: setup and troubleshooting no longer assume an earlier private version (token settings, command-based registrations); the Baton upgrade steps moved under Updates in the operations guide, and its security model is easier to scan.
 
 ## 0.13.0 — 2026-10-10
 

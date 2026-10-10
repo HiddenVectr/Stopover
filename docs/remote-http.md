@@ -12,7 +12,7 @@ AI agent on your tailnet
 
 ## Access model
 
-Stopover requires no connection token or login. Stopover only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or a `*.ts.net` name. The Host check is an additional request boundary; access still depends on your network rules. To reach it by another name or a tailnet IP, add a comma-separated list to `STOPOVER_ALLOWED_HOSTS` in the Compose service's `environment` (for example `handoff.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Access is otherwise controlled by Tailscale and the server's network configuration. Anyone allowed to reach Stopover can read and mutate its shared inbox; there are no separate user permissions inside the application.
+Stopover requires no connection token or login. Stopover only answers requests whose `Host` is `localhost`, `127.0.0.1`, `::1` or a `*.ts.net` name. The Host check is an additional request boundary; access still depends on your network rules. To reach it by another name or a tailnet IP, add a comma-separated list to `STOPOVER_ALLOWED_HOSTS` in the Compose service's `environment` (for example `stopover.example.com,100.64.0.10`; a leading `*.` matches subdomains, and `*` turns the check off). Access is otherwise controlled by Tailscale and the server's network configuration. Anyone allowed to reach Stopover can read and mutate its shared inbox; there are no separate user permissions inside the application.
 
 Keep Docker's published port bound to loopback (`127.0.0.1:8765:8765`) and use **Tailscale Serve**. Tailscale Funnel publishes services to the internet and is unsuitable for this token-free deployment. Restrict tailnet access to the server's HTTPS port (443) to your intended users/devices. [Tailscale Serve applies tailnet access rules](https://tailscale.com/docs/features/tailscale-serve).
 
@@ -32,7 +32,7 @@ docker compose ps
 curl --fail http://127.0.0.1:8765/healthz
 ```
 
-The health response should contain `"ready": true`. The named Docker volume stores handoffs across container replacements. A fresh server starts with its own store; cloning the repository does not copy handoffs from another machine. To move existing data, follow the [backup and restore guidance](operations.md#storage-restart-and-backup).
+The health response should contain `"ready": true`. The named Docker volume keeps handoffs and personal memories across container replacements. A fresh server starts with its own store; cloning the repository does not copy data from another machine. To move existing data, follow the [backup and restore guidance](operations.md#storage-restart-and-backup).
 
 ## 2. Enable private HTTPS
 
@@ -58,7 +58,7 @@ Use these settings from devices permitted by your tailnet rules:
 | Authentication | None |
 | Dashboard | `https://myserver.example-tailnet.ts.net/` |
 
-Follow the [client setup instructions](clients.md) for Codex, Claude Code, Cursor, OMP, Hermes Agent, or a generic client. Replace the localhost URL with the MCP URL above in either the add command or configuration file. Remove obsolete token settings from older registrations.
+Follow the [client setup instructions](clients.md) for Codex, Claude Code, Cursor, OMP, Hermes Agent, or a generic client. Replace the localhost URL with the MCP URL above in either the add command or configuration file.
 
 The process making the MCP connection must have tailnet access. For a remote agent, container, VM, or hosted agent, check connectivity from that runtime; having Tailscale on your laptop alone does not give a cloud agent access. Clients must support Streamable HTTP or use a compatible adapter.
 
@@ -86,7 +86,7 @@ docker compose up --build -d --wait --wait-timeout 60
 docker compose ps
 ```
 
-The data volume is preserved. Do not run `docker compose down -v` unless you intend to delete its handoffs.
+The data volume is preserved. Do not run `docker compose down -v` unless you intend to delete its handoffs and memories.
 
 - If the local health check fails, inspect `docker logs --tail 50 stopover` and `docker compose ps`.
 - If local health works but the HTTPS check fails, inspect `tailscale status`, `tailscale serve status`, the client's tailnet connection, and access rules for port 443.
@@ -94,4 +94,4 @@ The data volume is preserved. Do not run `docker compose down -v` unless you int
 - If Stopover returns `Cross-site request not allowed`, open the dashboard directly at its Serve URL. Native MCP clients normally omit Fetch Metadata headers.
 - If an agent discovers no tools, verify that it uses the `/mcp` endpoint and Streamable HTTP, then reload its MCP configuration or start a new session.
 
-MCP transfers saved task context, not project files. Receiving agents need their own access to any workspace required to continue the work.
+Stopover transfers saved task context, not project files. Receiving agents need their own access to any workspace required to continue the work.
