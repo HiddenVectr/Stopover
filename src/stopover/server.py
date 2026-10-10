@@ -1,11 +1,13 @@
 """HTTP application: MCP endpoint, read-only dashboard API, and the extension points used by hosted builds."""
 from __future__ import annotations
 
+import html
 import ipaddress
 import json
 import re
 from contextlib import asynccontextmanager
-from functools import partial
+from dataclasses import asdict, dataclass
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import Awaitable, Callable, Iterable
 from urllib.parse import urlsplit
@@ -18,7 +20,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 from starlette.routing import BaseRoute, Mount, Route
 from starlette.staticfiles import StaticFiles
 
@@ -32,6 +34,27 @@ from .store import Store
 STATIC = Path(__file__).parent / "static"
 DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "::1", "*.ts.net")
 Authenticator = Callable[[Request], Awaitable[RequestContext | None]]
+
+
+@dataclass(frozen=True)
+class Brand:
+    """Dashboard wording a host can replace with create_app(brand=...). The defaults describe a self-hosted Stopover."""
+    name: str = "Stopover"
+    title: str = "Stopover · Agent inbox"
+    status: str = "Self-hosted inbox"
+    # Shown until /api/session (if the host serves it) names the signed-in workspace.
+    workspace: str = "Local workspace"
+    workspace_detail: str = "One machine. All your agents."
+
+
+@lru_cache(maxsize=8)
+def dashboard_html(brand: Brand = Brand()) -> str:
+    """The dashboard page with each data-brand="<field>" element's text set from brand, so nothing flashes on load."""
+    page = (STATIC / "index.html").read_text(encoding="utf-8")
+    for field, value in asdict(brand).items():
+        page = re.sub(rf'(<(\w+)[^>]*\sdata-brand="{field}"[^>]*>).*?(</\2>)',
+                      lambda m, value=value: m.group(1) + html.escape(value) + m.group(3), page, flags=re.S)
+    return page
 
 
 def result_message(result):
@@ -156,7 +179,7 @@ class HostAllowlist:
 class Authentication:
     """Run the configured authenticator for /mcp and /api/* and attach the resulting RequestContext."""
     def __init__(self, app, auth: Authenticator | None, login_url: str | None = None,
-                 mcp_challenge: Callable[[Request], str] | None = None):
+                 mcp_challenge: Callable[[Request], str] | None = None, brand: Brand | None = None):
         self.app, self.auth, self.login_url, self.mcp_challenge = app, auth, login_url, mcp_challenge
 
     async def __call__(self, scope, receive, send):
@@ -239,7 +262,7 @@ class RequestBoundary:
 def create_app(directory=None, *, service: StopoverService | None = None, auth: Authenticator | None = None,
                allowed_hosts: Iterable[str] | None = None, extra_routes: Iterable[BaseRoute] = (),
                middleware: Iterable[Middleware] = (), login_url: str | None = None,
-               mcp_challenge: Callable[[Request], str] | None = None):
+               mcp_challenge: Callable[[Request], str] | None = None, brand: Brand | None = None):
     """Build the HTTP app.
 
     The local deployment calls this with no arguments. A hosted build passes its own service (backend and registry),
@@ -248,6 +271,7 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
     also serve GET /api/session ({"user": {...}, "workspace": {...}, "logout_url": ...}) to show the signed-in account.
     mcp_challenge(request) returns the WWW-Authenticate value for unauthenticated /mcp requests, e.g.
     'Bearer resource_metadata="https://host/.well-known/oauth-protected-resource/mcp"' for MCP OAuth discovery.
+    brand replaces the dashboard's product name, page title, status line and placeholder workspace (see Brand).
     """
     if service is None:
         directory = directory or env("DATA_DIR", "/data")
@@ -272,7 +296,7 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
         return await anyio.to_thread.run_sync(service.execute, name, params, request_context(request))
 
     async def page(request):
-        return FileResponse(STATIC / "index.html")
+        return HTMLResponse(dashboard_html(brand or Brand()))
 
     async def health(request):
         try:

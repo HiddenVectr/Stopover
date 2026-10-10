@@ -5,6 +5,8 @@ const labels = { all: 'All handoffs', available: 'Ready to resume', claimed: 'In
 const state = { status: 'all', selected: location.pathname.startsWith('/handoffs/') ? location.pathname.split('/')[2] : null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
 let toastTimer, searchTimer;
 let session = null;  // Set when the host serves /api/session.
+// The product name the server put in the page (a host can rebrand it with create_app(brand=...)).
+const BRAND = document.querySelector('[data-brand="name"]')?.textContent || 'Stopover';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -604,7 +606,7 @@ function renderMemoryDetail(item) {
   }
   const content = el('div', 'detail-content');
   if (item.deleted) {
-    textSection(content, 'Forgotten', 'This memory was removed from Stopover. Its content and evidence are no longer stored. Other agents learn about the deletion the next time they import your memory.');
+    textSection(content, 'Forgotten', `This memory was removed from ${BRAND}. Its content and evidence are no longer stored. Other agents learn about the deletion the next time they import your memory.`);
   } else {
     textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
     textSection(content, 'Original source', item.source.client);
@@ -618,7 +620,7 @@ function renderMemoryDetail(item) {
   textSection(content, 'Created', date(item.created_at));
   textSection(content, 'Revision', String(item.revision));
   textSection(content, 'Memory ID', item.id);
-  content.append(el('p', 'trust-note', 'Ask any agent to correct or forget a memory. Stopover shares personal context; each agent decides whether to remember it locally.'));
+  content.append(el('p', 'trust-note', `Ask any agent to correct or forget a memory. ${BRAND} shares personal context; each agent decides whether to remember it locally.`));
   panel.append(header, content);
 }
 

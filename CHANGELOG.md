@@ -7,9 +7,12 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+## 0.14.0 — 2026-10-10
+
+- Hosts can rebrand the dashboard: `create_app(brand=Brand(...))` sets the product name, page title, sidebar status line and placeholder workspace, written into the page on the server so nothing flashes on load. `dashboard_html(brand)` serves the same page from a host's own route. Plain Stopover is unchanged.
 - Docs: personal memory has its own guide, [docs/memory.md](docs/memory.md), explaining how it differs from handoffs, what a memory holds, and how correcting and forgetting work. The README and usage guide present handoffs and personal memory as two separate features.
 - Agents are told up front that handoffs and personal memories are separate features; memories have no claims.
-- The dashboard says "agent" instead of "harness".
+- The dashboard says "agent" instead of "harness". Documentation screenshots are in dark mode.
 - Docs: setup and troubleshooting no longer assume an earlier private version (token settings, command-based registrations); the Baton upgrade steps moved under Updates in the operations guide, and its security model is easier to scan.
 
 ## 0.13.0 — 2026-10-10
