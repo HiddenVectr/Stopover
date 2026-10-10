@@ -11,3 +11,10 @@ outputs
 .env
 data
 playwright-report
+# Local agent settings, tool state and working notes: never part of the build context.
+.claude
+.omc
+work
+.env.*
+*.db
+*.sqlite*

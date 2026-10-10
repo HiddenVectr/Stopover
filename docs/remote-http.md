@@ -92,6 +92,6 @@ The data volume is preserved. Do not run `docker compose down -v` unless you int
 - If local health works but the HTTPS check fails, inspect `tailscale status`, `tailscale serve status`, the client's tailnet connection, and access rules for port 443.
 - If a client receives `Host not allowed`, it is using a hostname or IP outside the allowlist. Use the `*.ts.net` Serve URL, or add the name to `BATON_ALLOWED_HOSTS` and restart the container.
 - If Baton returns `Cross-site request not allowed`, open the dashboard directly at its Serve URL. Native MCP clients normally omit Fetch Metadata headers.
-- If a agent discovers no tools, verify that it uses the `/mcp` endpoint and Streamable HTTP, then reload its MCP configuration or start a new session.
+- If an agent discovers no tools, verify that it uses the `/mcp` endpoint and Streamable HTTP, then reload its MCP configuration or start a new session.
 
 MCP transfers saved task context, not project files. Receiving agents need their own access to any workspace required to continue the work.
