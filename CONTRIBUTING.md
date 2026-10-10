@@ -1,12 +1,12 @@
-# Contributing to Baton
+# Contributing to Stopover
 
 Thanks for helping. Bug reports, client setup notes and focused pull requests are all welcome.
 
 ## Before you start
 
-- **Bugs:** open an issue with what you did, what you expected, what happened, and your Baton version and client (Claude Code, Codex, Cursor and so on).
+- **Bugs:** open an issue with what you did, what you expected, what happened, and your Stopover version and client (Claude Code, Codex, Cursor and so on).
 - **Security issues:** don't open an issue; follow [SECURITY.md](SECURITY.md).
-- **New features:** open an issue first to discuss it. Baton deliberately stays small: one container, no accounts, no outbound calls. Features that need a hosted service may not fit here.
+- **New features:** open an issue first to discuss it. Stopover deliberately stays small: one container, no accounts, no outbound calls. Features that need a hosted service may not fit here.
 
 ## Development setup
 
@@ -18,7 +18,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. To run the server without Docker: `.venv/bin/python -m baton --data-dir ./data serve --host 127.0.0.1 --port 8765`.
+On Windows, use `.venv\Scripts\python.exe` and `.venv\Scripts\pip.exe`. To run the server without Docker: `.venv/bin/python -m stopover --data-dir ./data serve --host 127.0.0.1 --port 8765`.
 
 ## Pull requests
 
@@ -33,4 +33,4 @@ CI must pass: tests on Python 3.10 and 3.12, the minimum dependency versions, th
 
 ## Licensing
 
-Baton is licensed under the [Apache License 2.0](LICENSE). By submitting a contribution, you agree it's licensed under the same terms (section 5 of the license); there's no separate contributor agreement.
+Stopover is licensed under the [Apache License 2.0](LICENSE). By submitting a contribution, you agree it's licensed under the same terms (section 5 of the license); there's no separate contributor agreement.

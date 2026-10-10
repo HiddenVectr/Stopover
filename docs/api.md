@@ -1,6 +1,6 @@
 # API reference
 
-Exact MCP tool contracts for integrations and custom scripts. For everyday requests such as saving and resuming work, see [Using Baton](usage.md).
+Exact MCP tool contracts for integrations and custom scripts. For everyday requests such as saving and resuming work, see [Using Stopover](usage.md).
 
 The server exposes eleven tools over Streamable HTTP at `/mcp`; the stdio bridge exposes the same tools. Inputs are validated against the [committed schemas](../schemas/), generated from the Python models. HTTP request bodies are limited to 64 KiB; individual records and memory batches have smaller limits described below. Agents build tool arguments from your request and available context.
 
@@ -8,17 +8,17 @@ The server exposes eleven tools over Streamable HTTP at `/mcp`; the stdio bridge
 
 | Tool | Behavior |
 | --- | --- |
-| `baton_save` | Validate and save immutable source context. Return an ID and receipt. |
-| `baton_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
-| `baton_get` | Return every record field and the current lifecycle state, without changing anything. |
-| `baton_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
-| `baton_claim` | Acquire, renew or release a lease. Acquire returns a claim token; renew and release need only the ID and token. |
-| `baton_complete` | Record success, blocked work or abandonment, using the claim token. |
-| `baton_delete` | Permanently delete a handoff and its history (refused while another agent holds an active claim). Agents are told to use it only on explicit request. |
+| `stopover_save` | Validate and save immutable source context. Return an ID and receipt. |
+| `stopover_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
+| `stopover_get` | Return every record field and the current lifecycle state, without changing anything. |
+| `stopover_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
+| `stopover_claim` | Acquire, renew or release a lease. Acquire returns a claim token; renew and release need only the ID and token. |
+| `stopover_complete` | Record success, blocked work or abandonment, using the claim token. |
+| `stopover_delete` | Permanently delete a handoff and its history (refused while another agent holds an active claim). Agents are told to use it only on explicit request. |
 
 Task mutations (except deletion) accept an optional `operation_id` (any UUID, any case). Supply one to make retries safe: after uncertain delivery, retry the **identical request and operation ID**. Changing its arguments returns `IDEMPOTENCY_CONFLICT`. Without an operation ID, a retry creates a second record or action. The `replayed` flag means the receipt is historical: fetch current state before relying on an old claim. Receipts are kept for 7 days; a retry after that is treated as a new request.
 
-The tools' MCP annotations follow the same rule. Only the read tools, `baton_delete` and `baton_memory_forget` advertise `idempotentHint`, because repeating them with identical arguments changes nothing further. Saves, claims, resumes and completions are retry-safe only when the same `operation_id` is reused, so they don't. `baton_delete`, `baton_memory_forget` and `baton_memory_update` (which can overwrite a memory) advertise `destructiveHint`, so clients may ask before calling them.
+The tools' MCP annotations follow the same rule. Only the read tools, `stopover_delete` and `stopover_memory_forget` advertise `idempotentHint`, because repeating them with identical arguments changes nothing further. Saves, claims, resumes and completions are retry-safe only when the same `operation_id` is reused, so they don't. `stopover_delete`, `stopover_memory_forget` and `stopover_memory_update` (which can overwrite a memory) advertise `destructiveHint`, so clients may ask before calling them.
 
 Claims default to 1 hour (60–86,400 seconds allowed). An expired claim shows as available, but its holder can still renew, release or complete it until another agent acquires the handoff; the new claim's token fences out the old one. Renewal is therefore only needed to stop someone else taking over during long work. `expected_revision` and `claim_generation` are optional extra checks. A claim coordinates ownership; it does not make external file edits exactly once.
 
@@ -32,10 +32,10 @@ Personal memories are separate from task claims and completion, and are not remo
 
 | Memory tool | Contract |
 | --- | --- |
-| `baton_memory_read` | Read by `key`, `category`, or `q`; paginate with `limit` (1–50) and `cursor`. Use `include_deleted=true` for full reconciliation. |
-| `baton_memory_update` | Atomic batch of 1–50 entries under 48 KiB. Requires the updating `client` and `memories`; `operation_id` (any UUID) is optional but makes retries safe; optional `coverage` is echoed for the capture report (not retained in receipts); `partial=true` applies non-conflicting entries and reports the rest as `action: "conflict"`. Each entry has a stable topic `key`, `content`, and `expected_revision` (0 for new keys). Optional category, basis, evidence and `source` (defaults to the updating client) preserve meaning/provenance; `recreate=true` re-establishes a forgotten key. |
-| `baton_memory_forget` | Explicit user-requested deletion; entries contain `key` and an optional `expected_revision` check, and `operation_id` is optional. Removes the active content and evidence, leaving an ID/key/revision deletion marker. |
-| `baton_memory_export` | Same pagination/filtering as read, plus `format=json` or `markdown`; each page includes structured entries, schema version, store revision, and continuation cursor. Follow all pages for a full snapshot. |
+| `stopover_memory_read` | Read by `key`, `category`, or `q`; paginate with `limit` (1–50) and `cursor`. Use `include_deleted=true` for full reconciliation. |
+| `stopover_memory_update` | Atomic batch of 1–50 entries under 48 KiB. Requires the updating `client` and `memories`; `operation_id` (any UUID) is optional but makes retries safe; optional `coverage` is echoed for the capture report (not retained in receipts); `partial=true` applies non-conflicting entries and reports the rest as `action: "conflict"`. Each entry has a stable topic `key`, `content`, and `expected_revision` (0 for new keys). Optional category, basis, evidence and `source` (defaults to the updating client) preserve meaning/provenance; `recreate=true` re-establishes a forgotten key. |
+| `stopover_memory_forget` | Explicit user-requested deletion; entries contain `key` and an optional `expected_revision` check, and `operation_id` is optional. Removes the active content and evidence, leaving an ID/key/revision deletion marker. |
+| `stopover_memory_export` | Same pagination/filtering as read, plus `format=json` or `markdown`; each page includes structured entries, schema version, store revision, and continuation cursor. Follow all pages for a full snapshot. |
 
 Topic keys are normalized to lowercase, with spaces turned into dashes, and identify individual facts (for example `communication.response_length`). Reuse keys to avoid duplicates. Semantic reconciliation belongs to the harness; the server does not run an LLM or infer whether differently worded entries refer to the same fact. `source` records the original evidence, while `client` identifies the harness performing the update. An entry whose content, category and basis match the stored memory is unchanged: it keeps its revision and original `source`, so re-syncing the same fact from another harness does not rewrite provenance. When only category or basis change, the original source and evidence are kept.
 
@@ -47,4 +47,4 @@ The memory tables are added automatically to existing schema-2 databases without
 
 ## Prompts
 
-The server exposes `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Client-specific shortcuts are described in [Using Baton](usage.md#optional-shortcuts). Prompts provide instructions to the receiving agent; they do not start agents or execute work independently.
+The server exposes `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Client-specific shortcuts are described in [Using Stopover](usage.md#optional-shortcuts). Prompts provide instructions to the receiving agent; they do not start agents or execute work independently.

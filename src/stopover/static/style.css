@@ -1,4 +1,4 @@
-/* Baton dashboard. Desktop: sidebar, then a fixed-width list beside the detail. Up to 900px: a top bar with
+/* Stopover dashboard. Desktop: sidebar, then a fixed-width list beside the detail. Up to 900px: a top bar with
    status chips, and one pane at a time — the list, or a selected item's detail with a Back button. */
 
 :root {

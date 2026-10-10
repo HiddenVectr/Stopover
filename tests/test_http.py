@@ -2,7 +2,7 @@ import anyio
 import pytest
 from starlette.testclient import TestClient
 
-from baton.server import create_app
+from stopover.server import create_app
 
 
 def test_local_dashboard_and_api_need_no_token(tmp_path):
@@ -45,17 +45,17 @@ def test_foreign_or_invalid_origins_cannot_use_mcp_or_the_api(tmp_path, record, 
     app = create_app(tmp_path)
     with TestClient(app, base_url="http://localhost:8765", headers={"origin": origin}) as client:
         saved = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                                          "params": {"name": "baton_save", "arguments": {"record": record}}},
+                                          "params": {"name": "stopover_save", "arguments": {"record": record}}},
                             headers={"accept": "application/json, text/event-stream"})
         assert saved.status_code == 403 and saved.json() == {"error": "Origin not allowed"}
         assert client.get("/api/handoffs").status_code == 403
-        assert app.state.service.execute("baton_list", {"status": "all"})["data"]["items"] == []  # nothing was saved
+        assert app.state.service.execute("stopover_list", {"status": "all"})["data"]["items"] == []  # nothing was saved
 
 
 def test_native_clients_without_origin_are_unaffected(tmp_path, record):
     with TestClient(create_app(tmp_path), base_url="http://localhost:8765") as client:
         saved = client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                                          "params": {"name": "baton_save", "arguments": {"record": record}}},
+                                          "params": {"name": "stopover_save", "arguments": {"record": record}}},
                             headers={"accept": "application/json, text/event-stream"})
         assert saved.status_code == 200 and saved.json()["result"]["structuredContent"]["ok"]
 
@@ -93,7 +93,7 @@ def test_cross_site_browser_requests_are_rejected(tmp_path):
 def test_all_details_and_events_are_read_only(tmp_path, record):
     import uuid
     app = create_app(tmp_path)
-    saved = app.state.store.execute("baton_save", {"operation_id": str(uuid.uuid4()), "record": record})["data"]
+    saved = app.state.store.execute("stopover_save", {"operation_id": str(uuid.uuid4()), "record": record})["data"]
     with TestClient(app, base_url="http://127.0.0.1:8765") as client:
         detail = client.get("/api/handoffs/" + saved["id"]).json()["data"]
         assert detail["record"]["context"]["constraints"] == record["context"]["constraints"]
@@ -107,7 +107,7 @@ def test_all_details_and_events_are_read_only(tmp_path, record):
 def test_committed_schemas_match_models():
     import json
     from pathlib import Path
-    from baton.models import INPUTS, Record
+    from stopover.models import INPUTS, Record
     schemas = Path(__file__).resolve().parents[1] / "schemas"
     for name, model in {**INPUTS, "record": Record}.items():
         assert json.loads((schemas / f"{name}.json").read_text()) == model.model_json_schema(), name
