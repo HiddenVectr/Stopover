@@ -1,14 +1,14 @@
-name: baton
+name: stopover
 services:
-  baton:
+  stopover:
     build: .
-    image: baton:0.12.0
-    container_name: baton
+    image: stopover:0.13.0
+    container_name: stopover
     restart: unless-stopped
     ports:
       - "127.0.0.1:8765:8765"
     volumes:
-      - baton_data:/data
+      - stopover_data:/data
     read_only: true
     tmpfs:
       - /tmp:size=32m,mode=1777
@@ -29,4 +29,4 @@ services:
         max-size: "5m"
         max-file: "2"
 volumes:
-  baton_data:
+  stopover_data:

@@ -1,15 +1,15 @@
 {
   "mcpServers": {
-    "baton": {
+    "stopover": {
       "type": "stdio",
       "command": "docker",
       "args": [
         "exec",
         "-i",
-        "baton",
+        "stopover",
         "python",
         "-m",
-        "baton",
+        "stopover",
         "bridge"
       ]
     }

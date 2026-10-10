@@ -1,12 +1,22 @@
 # Changelog
 
-All notable changes to Baton. Versions follow [semantic versioning](https://semver.org/). Baton is pre-1.0, so a
+All notable changes to Stopover (called Baton until 0.13.0, and Handoff before that). Versions follow [semantic versioning](https://semver.org/). Baton is pre-1.0, so a
 minor release (0.x) can include breaking changes, for MCP clients or for hosts using the extension API (`Backend`,
 `RequestContext`, the registry and `create_app` hooks). Every breaking change is marked **Breaking** here, with what
 to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+## 0.13.0 — 2026-10-10
+
+- **Breaking: Baton is now Stopover.** Another project's name was too close to Baton. Everything is renamed:
+  - Package `stopover-mcp` (was `baton-inbox`); Python module and CLI `stopover` (`python -m stopover`).
+  - MCP server name `stopover`, tools `stopover_save`, `stopover_list`, `stopover_get`, `stopover_claim`, `stopover_resume`, `stopover_complete`, `stopover_delete` and `stopover_memory_*` (were `baton_*`), prompts `/mcp__stopover__save` and so on. Re-register your agents under the new name.
+  - Environment variables `STOPOVER_*`; the old `BATON_*` and `HANDOFF_*` names still work.
+  - Docker project, container and image `stopover`, data volume `stopover_stopover_data`. Copy your data across from `baton_baton_data`; see [Upgrading from Baton](docs/operations.md#upgrading-from-baton).
+  - The database file becomes `stopover.sqlite3`; `baton.sqlite3` (or `handoff.sqlite3`) is renamed on first start.
+  - Repository `HiddenVectr/Stopover`.
+  - The dashboard keeps its access token under a new browser key, so a token-protected server asks for it once more.
 - Malformed `Host` and `Origin` headers (such as `Origin: https://[`, or a non-ASCII port) get a clean 403 instead of a 500 error.
 
 ## 0.12.0 — 2026-10-09

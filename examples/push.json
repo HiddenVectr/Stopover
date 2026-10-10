@@ -12,7 +12,7 @@
       "transfer_method": "manual_import"
     },
     "context": {
-      "objective": "Confirm that a fresh agent can recover context from the shared Baton inbox.",
+      "objective": "Confirm that a fresh agent can recover context from the shared Stopover inbox.",
       "current_state": "The local service is running. This sample is ready for either agent to read and claim. No application code needs changing.",
       "next_steps": [
         {

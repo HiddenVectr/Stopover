@@ -1,10 +1,10 @@
 # Implementation notes
 
-Baton exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [API reference](api.md) for tool contracts and the [client setup guide](clients.md) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. A Host allowlist (loopback names and `*.ts.net` by default, extended with `BATON_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
+Stopover exposes token-free Streamable HTTP so AI harnesses can connect by URL on localhost or a private network. The stdio bridge remains available for existing integrations. Source and target client names are free-form labels, not a Claude Code/Codex allowlist. See the [API reference](api.md) for tool contracts and the [client setup guide](clients.md) for Codex, Claude Code, Cursor, Oh My Pi (OMP), Hermes Agent, and generic configuration. A Host allowlist (loopback names and `*.ts.net` by default, extended with `STOPOVER_ALLOWED_HOSTS`) runs before every route; the MCP SDK's exact-match check stays off because it cannot express wildcard domains. [Tailscale deployment](remote-http.md) describes private HTTPS hosting with network access controlled by Tailscale.
 
 The service uses the official Python MCP SDK's stateless Streamable HTTP transport. A small stdio adapter starts inside the running container for each client and forwards to the same owner process. Both transports expose the same eleven tool schemas and five prompts and preserve structured results and MCP error flags.
 
-Natural-language save guidance is included in both the server initialization instructions and the `baton_save` tool description, so the save workflow is described even when a harness exposes tool descriptions without the server-level instructions. A short save request is enough: the agent builds a contextual summary, leaves the recipient unspecified by default, and returns the saved ID only after success. The MCP receives the summary the agent submits; it cannot read the conversation itself. Model compliance and summary quality still depend on the harness and available context.
+Natural-language save guidance is included in both the server initialization instructions and the `stopover_save` tool description, so the save workflow is described even when a harness exposes tool descriptions without the server-level instructions. A short save request is enough: the agent builds a contextual summary, leaves the recipient unspecified by default, and returns the saved ID only after success. The MCP receives the summary the agent submits; it cannot read the conversation itself. Model compliance and summary quality still depend on the harness and available context.
 
 SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts. Only a SHA-256 hash of each claim token is stored, and the token alone authorizes renew/release/complete; an expired lease keeps working until another agent acquires the handoff. Mutation timestamps never move backward, even if the system clock does. Receipts expire after 7 days. The read-only web API uses these same store methods, with a separate paginated event history.
 
@@ -13,7 +13,7 @@ The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build 
 Design notes:
 
 - A few nonessential source fields now have stable defaults, so agents can create a concise handoff without inventing metadata. Objective, current state, next steps and acceptance criteria remain required.
-- Local and private network access require no Baton token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
+- Local and private network access require no Stopover token. The service no longer creates or reads an access-token file. Existing data volumes are preserved, including any unused token file from an earlier version. Task-claim tokens still coordinate active work and are unrelated to connection authentication.
 - The dashboard adds read-only HTTP endpoints and opens without a login. Agent writes remain MCP-only.
 - Count limits protect the small local store; an exact 1 GiB filesystem quota is not implemented. Disk-full errors fail the transaction; monitor the volume and back it up.
 - Tests cover the implemented contracts; there is no broad fault-injection or performance test matrix yet.
@@ -30,15 +30,15 @@ The code is layered so a hosted build can reuse everything except storage and ac
 | `domain.py` | Storage-independent rules: summaries, cursors, claim verification, acceptance-criteria matching, errors. |
 | `backend.py` | The storage contract: `Backend.transaction(ctx, write)` yields a `Transaction` scoped to one workspace, with rows as plain dicts. |
 | `sqlite_backend.py` | The local backend: single owner, single workspace, all SQL and migrations. Other workspaces get `UNKNOWN_WORKSPACE`. |
-| `service.py`, `memory.py` | `BatonService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
+| `service.py`, `memory.py` | `StopoverService`: validation, idempotent receipts, monotonic time, retention, and every tool handler, written only against `backend.py`. |
 | `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. `core_registry().copy()` can be extended with more tools. |
 | `server.py` | `create_app(service=, auth=, allowed_hosts=, extra_routes=, middleware=)`. `auth` is an async callable that maps a request to a `RequestContext` (or `None` for 401) for `/mcp` and `/api/*`; MCP handlers and the dashboard API pass that context to the service, and events record its `actor`. |
-| `domain.Policy` | Per-workspace limits and retention. `BatonService(policy=...)` takes a `Policy` or a function of the `RequestContext`, so a hosted build can vary limits by plan. |
-| `on_event` | `BatonService(on_event=...)` receives events such as `handoff.pushed`, `handoff.completed` and `memory.updated` after each commit (never on replays or rollbacks). Events carry IDs, revisions and the actor, never handoff or memory content; handler errors are logged and ignored. |
+| `domain.Policy` | Per-workspace limits and retention. `StopoverService(policy=...)` takes a `Policy` or a function of the `RequestContext`, so a hosted build can vary limits by plan. |
+| `on_event` | `StopoverService(on_event=...)` receives events such as `handoff.pushed`, `handoff.completed` and `memory.updated` after each commit (never on replays or rollbacks). Events carry IDs, revisions and the actor, never handoff or memory content; handler errors are logged and ignored. |
 | Dashboard sign-in | When `/api/*` answers 401 (an `auth` hook is configured), the dashboard asks for an access token, keeps it in `localStorage`, and sends it as `Authorization: Bearer`. Its connection instructions then show the token header with a `YOUR_TOKEN` placeholder. Without auth nothing changes. With `create_app(login_url=...)`, unauthenticated dashboard API calls return that URL and the dashboard redirects there (same origin only, with `return_to`). If the host serves `GET /api/session` (`user`, `workspace`, `logout_url`), the sidebar shows the signed-in account and Sign out posts to `logout_url`. Optional `links` (`[{label, url}]`, same-origin paths only) appear in the sidebar, and `access_token_url` switches the *Connect your agents* dialog to token instructions with a link to create one; `mcp_sign_in: true` switches it to sign-in instructions instead (add the URL, approve in the browser), keeping the token link as a fallback. The dashboard sends same-origin cookies so hosts can use session cookies; MCP stays bearer-only. |
 | MCP OAuth discovery | `create_app(mcp_challenge=fn)`: `fn(request)` returns the `WWW-Authenticate` value for unauthenticated `/mcp` requests, such as `Bearer resource_metadata="https://host/.well-known/oauth-protected-resource/mcp"`, so MCP clients can find the host's authorization server. Without it, the challenge is plain `Bearer`. |
-| `testing.py` | The backend conformance suite. A project with its own `Backend` runs it with `from baton.testing import *` and a `make_service` fixture (install the `testing` extra). Baton runs it against SQLite in `tests/test_conformance.py`. |
-| `store.py` | `Store`: the local deployment (`BatonService` over SQLite), kept for existing imports. |
+| `testing.py` | The backend conformance suite. A project with its own `Backend` runs it with `from stopover.testing import *` and a `make_service` fixture (install the `testing` extra). Stopover runs it against SQLite in `tests/test_conformance.py`. |
+| `store.py` | `Store`: the local deployment (`StopoverService` over SQLite), kept for existing imports. |
 
 A hosted build depends on this package and supplies its own `Backend` (for example Postgres with a workspace column), an authenticator, and any extra tools or routes. Tests guard the boundary: the service layer never references SQLite.
 
@@ -63,7 +63,7 @@ Dashboard screenshots: [desktop](images/dashboard.png), [mobile](images/dashboar
 Install the development dependencies using the [README instructions](../README.md#development). Run without Docker:
 
 ```sh
-.venv/bin/python -m baton --data-dir ./data serve --host 127.0.0.1 --port 8765
+.venv/bin/python -m stopover --data-dir ./data serve --host 127.0.0.1 --port 8765
 ```
 
 Never run two servers against the same data directory. Production packages are pinned in `requirements.lock` and the Docker base image by digest. The server uses the [official Python MCP SDK](https://github.com/modelcontextprotocol/python-sdk).

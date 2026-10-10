@@ -1,6 +1,6 @@
 """Regenerate the documentation screenshots in docs/images/.
 
-Starts a throwaway Baton server on a temporary data directory, fills it with clearly synthetic demo data through
+Starts a throwaway Stopover server on a temporary data directory, fills it with clearly synthetic demo data through
 real MCP calls (the same path agents use), and captures the dashboard with Playwright:
 
     .venv/bin/python scripts/screenshots.py
@@ -28,7 +28,7 @@ from playwright.sync_api import sync_playwright
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs" / "images"
 sys.path.insert(0, str(ROOT / "src"))
-from baton.sample import sample_record  # noqa: E402
+from stopover.sample import sample_record  # noqa: E402
 
 HANDOFFS = [
     dict(title="Fix refresh-token rotation in the auth service", project_key="acme-api", client="claude-code",
@@ -79,7 +79,7 @@ def record_for(spec) -> dict:
     record["coverage"] = {"basis": "Synthetic example data for documentation screenshots.", "omitted": []}
     context = record["context"]
     context.update(objective=spec["objective"], current_state=spec["state"],
-                   background="Synthetic example for Baton's documentation; not a real project.", constraints=[],
+                   background="Synthetic example for Stopover's documentation; not a real project.", constraints=[],
                    decisions=[{"decision": spec["decision"][0], "reason": spec["decision"][1], "evidence_ids": []}],
                    next_steps=[{"id": i, "action": a, "done_when": d} for i, a, d in spec["steps"]],
                    acceptance_criteria=spec["criteria"], open_questions=[])
@@ -100,16 +100,16 @@ async def populate(url: str):
 
         saved = []
         for spec in HANDOFFS:
-            saved.append(await call("baton_save", {"operation_id": str(uuid.uuid4()), "record": record_for(spec)}))
+            saved.append(await call("stopover_save", {"operation_id": str(uuid.uuid4()), "record": record_for(spec)}))
             time.sleep(1.1)  # distinct timestamps, so the list order is stable
         # One handoff in progress, one finished, the rest available.
-        await call("baton_resume", {"operation_id": str(uuid.uuid4()), "id": saved[1]["id"], "holder_label": "claude-code"})
-        done = await call("baton_resume", {"operation_id": str(uuid.uuid4()), "id": saved[3]["id"], "holder_label": "codex"})
-        await call("baton_complete", {"operation_id": str(uuid.uuid4()), "id": saved[3]["id"], "claim_token": done["claim_token"],
+        await call("stopover_resume", {"operation_id": str(uuid.uuid4()), "id": saved[1]["id"], "holder_label": "claude-code"})
+        done = await call("stopover_resume", {"operation_id": str(uuid.uuid4()), "id": saved[3]["id"], "holder_label": "codex"})
+        await call("stopover_complete", {"operation_id": str(uuid.uuid4()), "id": saved[3]["id"], "claim_token": done["claim_token"],
                                       "completion": {"outcome": "succeeded", "summary": "Release notes drafted with all fixes.",
                                                      "acceptance_results": [{"index": 0, "result": "pass",
                                                                              "evidence": "Checked against the 2.4 milestone."}]}})
-        await call("baton_memory_update", {"operation_id": str(uuid.uuid4()), "client": "claude-code", "memories": [
+        await call("stopover_memory_update", {"operation_id": str(uuid.uuid4()), "client": "claude-code", "memories": [
             {"key": key, "content": content, "expected_revision": 0, "category": category, "basis": "stated",
              "evidence": "Synthetic example for the documentation."} for key, content, category in MEMORIES]})
         return saved
@@ -157,7 +157,7 @@ def main():
     port = free_port()
     base = f"http://127.0.0.1:{port}"
     with tempfile.TemporaryDirectory() as data:
-        server = subprocess.Popen([sys.executable, "-m", "baton", "--data-dir", data, "serve", "--host", "127.0.0.1",
+        server = subprocess.Popen([sys.executable, "-m", "stopover", "--data-dir", data, "serve", "--host", "127.0.0.1",
                                    "--port", str(port)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             for _ in range(100):

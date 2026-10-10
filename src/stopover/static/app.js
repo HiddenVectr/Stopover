@@ -61,7 +61,7 @@ function showToast(message) {
   toastTimer = setTimeout(() => { $('toast').hidden = true; }, 3500);
 }
 
-const TOKEN_KEY = 'baton.accessToken';
+const TOKEN_KEY = 'stopover.accessToken';
 function accessToken() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } }
 function storeToken(value) {
   try { if (value) localStorage.setItem(TOKEN_KEY, value); else localStorage.removeItem(TOKEN_KEY); } catch { /* storage unavailable */ }
@@ -69,7 +69,7 @@ function storeToken(value) {
 }
 function authHeaders(value = accessToken()) { return value ? { authorization: 'Bearer ' + value } : {}; }
 
-// Servers that wrap Baton with authentication answer 401; ask for an access token instead of failing.
+// Servers that wrap Stopover with authentication answer 401; ask for an access token instead of failing.
 function requireSignIn() {
   if (accessToken()) storeToken('');
   if (!$('signin-dialog').open) { $('signin-error').hidden = true; $('signin-dialog').showModal(); $('signin-token').focus(); }
@@ -88,7 +88,7 @@ function goToLogin(loginUrl) {
 }
 
 async function api(path, options = {}) {
-  // Same-origin credentials let hosts that wrap Baton use session cookies; plain Baton sets none.
+  // Same-origin credentials let hosts that wrap Stopover use session cookies; plain Stopover sets none.
   const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, headers: { ...(options.headers || {}), ...authHeaders() } });
   if (response.status === 401) {
     const body = await response.json().catch(() => ({}));
@@ -442,9 +442,9 @@ function updateAuthUI() {
   $('setup-token-anchor').textContent = oauth ? 'Or create an access token' : 'Create an access token';
   $('setup-token-anchor').className = oauth ? 'button secondary' : 'button primary';
   // Show a placeholder rather than the real token so it never appears in screenshots or screen shares.
-  $('codex-add').textContent = oauth ? `codex mcp add baton --url ${mcpUrl}\ncodex mcp login baton`
-    : signedIn ? `export BATON_TOKEN=YOUR_TOKEN\ncodex mcp add baton --url ${mcpUrl} --bearer-token-env-var BATON_TOKEN` : `codex mcp add baton --url ${mcpUrl}`;
-  $('claude-add').textContent = `claude mcp add --scope user --transport http baton ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
+  $('codex-add').textContent = oauth ? `codex mcp add stopover --url ${mcpUrl}\ncodex mcp login stopover`
+    : signedIn ? `export STOPOVER_TOKEN=YOUR_TOKEN\ncodex mcp add stopover --url ${mcpUrl} --bearer-token-env-var STOPOVER_TOKEN` : `codex mcp add stopover --url ${mcpUrl}`;
+  $('claude-add').textContent = `claude mcp add --scope user --transport http stopover ${mcpUrl}` + (signedIn ? ' --header "Authorization: Bearer YOUR_TOKEN"' : '');
   $('setup-intro').textContent = oauth ? 'Add this MCP server to your agent. The first time it connects, it opens your browser to sign in; there is no token to copy. In Claude Code, run /mcp and choose Authenticate if it asks.'
     : signedIn ? 'Add this Streamable HTTP MCP server to your harness. Requests need your access token (replace YOUR_TOKEN).'
     : 'Add this Streamable HTTP MCP server to your harness. No token or login is needed.';
@@ -478,7 +478,7 @@ $('signout-button').addEventListener('click', async () => {
   storeToken(''); requireSignIn();
 });
 
-// Hosts that add accounts can describe the signed-in user at /api/session; plain Baton answers 404.
+// Hosts that add accounts can describe the signed-in user at /api/session; plain Stopover answers 404.
 async function loadSession() {
   try {
     const response = await fetch('/api/session', { credentials: 'same-origin', cache: 'no-store', headers: authHeaders() });
@@ -548,7 +548,7 @@ function renderMemoryRows(list) {
   if (!memories.items.length) {
     const empty = el('div', 'empty-list');
     const filtered = $('memory-search').value || $('memory-category').value;
-    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI harness “update my Baton memory” to save what it knows about you.'));
+    empty.append(el('strong', '', filtered ? 'No matching memories.' : 'No personal memories yet.'), el('p', '', filtered ? 'Try a different search or category.' : 'Tell your AI harness “update my Stopover memory” to save what it knows about you.'));
     list.append(empty);
   }
   for (const item of memories.items) {
@@ -604,7 +604,7 @@ function renderMemoryDetail(item) {
   }
   const content = el('div', 'detail-content');
   if (item.deleted) {
-    textSection(content, 'Forgotten', 'This memory was removed from Baton. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
+    textSection(content, 'Forgotten', 'This memory was removed from Stopover. Its content and evidence are no longer stored. Other harnesses can retrieve this deletion marker.');
   } else {
     textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
     textSection(content, 'Original source', item.source.client);
@@ -618,7 +618,7 @@ function renderMemoryDetail(item) {
   textSection(content, 'Created', date(item.created_at));
   textSection(content, 'Revision', String(item.revision));
   textSection(content, 'Memory ID', item.id);
-  content.append(el('p', 'trust-note', 'Ask your harness to correct or forget a memory. Baton shares personal context; each harness decides whether to remember it locally.'));
+  content.append(el('p', 'trust-note', 'Ask your harness to correct or forget a memory. Stopover shares personal context; each harness decides whether to remember it locally.'));
   panel.append(header, content);
 }
 
@@ -654,7 +654,7 @@ function chooseMemory(key, updateURL = true) {
 function emptyMemory() {
   const empty = el('div', 'empty-detail');
   empty.append(el('span', 'empty-icon', '◎'), el('h2', '', 'Personal context, in one place'),
-               el('p', '', 'Select a memory to see its source and latest update. To add or correct memories, tell any agent “update my Baton memory”.'));
+               el('p', '', 'Select a memory to see its source and latest update. To add or correct memories, tell any agent “update my Stopover memory”.'));
   return empty;
 }
 

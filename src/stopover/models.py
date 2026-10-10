@@ -286,7 +286,7 @@ Revision = Annotated[int, Field(ge=0), BeforeValidator(_not_bool)]
 
 class MemoryEntry(Model):
     key: MemoryKey = Field(description="Stable topic key, e.g. communication.response_length. Reuse the existing key when correcting a memory.")
-    expected_revision: Revision = Field(description="0 for a new key; otherwise the revision returned by baton_memory_read (for a forgotten key, its deletion-marker revision together with recreate=true).")
+    expected_revision: Revision = Field(description="0 for a new key; otherwise the revision returned by stopover_memory_read (for a forgotten key, its deletion-marker revision together with recreate=true).")
     content: MemoryText
     category: MemoryCategory = "fact"
     basis: Literal["stated", "observed", "inferred"] = "stated"
@@ -343,8 +343,8 @@ class MemoryExport(MemoryRead):
     format: Literal["json", "markdown"] = "json"
 
 
-INPUTS = {"baton_save": Push, "baton_list": ListQuery, "baton_get": Get,
-          "baton_claim": Claim, "baton_resume": Resume, "baton_complete": Complete, "baton_delete": Delete}
+INPUTS = {"stopover_save": Push, "stopover_list": ListQuery, "stopover_get": Get,
+          "stopover_claim": Claim, "stopover_resume": Resume, "stopover_complete": Complete, "stopover_delete": Delete}
 
-INPUTS.update({"baton_memory_read": MemoryRead, "baton_memory_update": MemoryUpdate,
-               "baton_memory_forget": MemoryForget, "baton_memory_export": MemoryExport})
+INPUTS.update({"stopover_memory_read": MemoryRead, "stopover_memory_update": MemoryUpdate,
+               "stopover_memory_forget": MemoryForget, "stopover_memory_export": MemoryExport})
