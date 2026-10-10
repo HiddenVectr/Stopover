@@ -28,7 +28,7 @@ For `outcome="succeeded"`, completion must report one passing result with nonemp
 
 ## Personal-memory tools
 
-Personal memories are separate from task claims and completion, and are not removed by handoff retention. All connected clients use one shared collection; the self-hosted server has no per-user partitioning.
+Personal memories are a separate feature from handoffs (see [personal memory](memory.md)): they have no claims or completion, and handoff retention never removes them. All connected clients use one shared collection; the self-hosted server has no per-user partitioning.
 
 | Memory tool | Contract |
 | --- | --- |
@@ -43,7 +43,7 @@ Writes require the revisions read from the store. A conflict rolls back the **wh
 
 `since_revision` returns changed entries, including deletion markers even when their erased content can no longer match a filter. After consuming all pages, save `store_revision` as the next checkpoint. A filtered read covers only that filter; use unfiltered reads for complete sync. Pagination continues across concurrent writes: every page reports the first page's `store_revision`, and anything written while you paginate has a higher revision, so the next `since_revision` read picks it up. `complete` means no further pages for this query, not that the source harness knew every fact about you.
 
-The memory tables are added automatically to existing schema-2 databases without changing task records. Back up the data volume before upgrading. Tombstones count toward the 10,000 memory-key limit; deletion removes content from application queries, not historical backups or forensic disk traces. Other harnesses learn deletions only when they retrieve them.
+Deletion markers count toward the 10,000 memory-key limit; deletion removes content from application queries, not historical backups or forensic disk traces. Other harnesses learn deletions only when they retrieve them.
 
 ## Prompts
 

@@ -1,8 +1,11 @@
 # Stopover
 
-**Save work in one AI coding agent and continue it in another.**
+**Hand work between AI coding agents, and give every agent the same picture of you.**
 
-Stopover is a small, self-hosted server with a web dashboard. It connects through MCP, the protocol agents use to call external tools. Your agent saves a summary of the goal, decisions, progress, and next steps. Another connected agent reads that summary and continues the task.
+Stopover is a small, self-hosted server with a web dashboard. Agents connect to it through MCP, the protocol they use to call external tools. It gives them two separate features:
+
+- **Handoffs:** save a task in one agent (its goal, decisions, progress and next steps) and continue it in another.
+- **Personal memory:** one shared set of your preferences, habits and ongoing context that every connected agent can read and update.
 
 ![Claude Code saves a handoff; Codex resumes its goal, decisions, progress, and next steps](docs/images/how-it-works.svg)
 
@@ -53,9 +56,11 @@ Connect your other agent to the same Stopover server, start a fresh session, and
 
 The receiving agent needs access to the project files. Stopover saves summaries rather than full transcripts, does not transfer files, and does not start agents for you. A claim helps coordinate work; it cannot prevent an agent from editing files after its claim expires.
 
-## Share personal context
+## Personal memory
 
-To save preferences and relevant personal context, say:
+Handoffs carry one task. Personal memory carries what your agents know about *you*, such as “prefers concise answers” or “uses pnpm, not npm”, so a new agent doesn't start from zero. Memories last until you ask an agent to forget them.
+
+To save what an agent knows about you, say:
 
 > Update my Stopover memory.
 
@@ -63,7 +68,7 @@ In another connected agent, say:
 
 > Import my Stopover memory.
 
-Browse saved memories in **Personal memories**. Ask an agent to correct or forget a specific memory. Stopover stores one shared collection; each agent decides whether to retain imported context locally.
+Browse saved memories in **Personal memories** on the dashboard, and ask any agent to correct or forget one. See [personal memory](docs/memory.md) for what is saved and how forgetting works.
 
 ## Keep your data private
 
@@ -75,7 +80,8 @@ Handoffs and memories survive container restarts in the Docker volume. **`docker
 
 ## More information
 
-- [Using Stopover](docs/usage.md): everyday workflows and troubleshooting.
+- [Using Stopover](docs/usage.md): saving, finding and resuming handoffs.
+- [Personal memory](docs/memory.md): sharing your preferences and context between agents.
 - [Client setup](docs/clients.md): commands and configuration for each agent.
 - [API reference](docs/api.md): tool contracts, retries, claims, and pagination.
 - [Operations](docs/operations.md): storage, configuration, backups, and retention.

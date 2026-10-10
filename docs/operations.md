@@ -2,30 +2,6 @@
 
 Storage, backups, retention, configuration, import/export and the security model of a Stopover server. For remote access, see [Tailscale deployment](remote-http.md).
 
-## Upgrading from Baton
-
-Stopover was called Baton until 0.13.0. Your data carries over; the database file is renamed automatically on first start. Two things change on your side.
-
-**1. Move the Docker data to the new volume.** Compose now names the volume `stopover_stopover_data`, so copy the old one across. Run these from the Stopover checkout:
-
-```sh
-docker stop baton && docker rm baton          # the old container; its volume stays
-docker volume create stopover_stopover_data
-docker run --rm -v baton_baton_data:/from:ro -v stopover_stopover_data:/to alpine sh -c 'cp -a /from/. /to/'
-docker compose up --build -d --wait
-```
-
-Check that the dashboard at <http://127.0.0.1:8765> shows your handoffs and memories. The old `baton_baton_data` volume is left untouched, so you can go back; delete it with `docker volume rm baton_baton_data` once you're happy.
-
-**2. Re-register your agents.** The MCP server is now named `stopover`, and the tools are `stopover_save`, `stopover_resume` and so on (they were `baton_*`). Remove the old `baton` entry and add the new one, for example:
-
-```sh
-claude mcp remove --scope user baton
-claude mcp add --scope user --transport http stopover http://127.0.0.1:8765/mcp
-```
-
-See [client setup](clients.md) for the other agents. Prompts change name too: `/mcp__baton__save` becomes `/mcp__stopover__save`. Environment variables can keep their `BATON_*` names, but `STOPOVER_*` is preferred.
-
 ## Configuration
 
 Set these in the Compose service's `environment` (or the shell, when running without Docker):
@@ -39,7 +15,7 @@ Set these in the Compose service's `environment` (or the shell, when running wit
 
 ## Storage, restart and backup
 
-The `stopover_stopover_data` local Docker volume contains SQLite. Container replacement preserves the saved handoffs; there is exactly one database owner. Stop with `docker compose stop`, restart with `docker compose up -d`. **Do not use `docker compose down -v` if you want to keep handoffs.**
+The `stopover_stopover_data` local Docker volume contains SQLite. Replacing the container keeps saved handoffs and memories; there is exactly one database owner. Stop with `docker compose stop`, restart with `docker compose up -d`. **Do not use `docker compose down -v` if you want to keep your handoffs and memories.**
 
 Backups include handoffs, activity, claims, and personal memories. Forgetting a memory does not remove old backups or copies in other agents. The database is not encrypted by Stopover; protect the volume and backup files as private data. Never start two Stopover servers against the same volume.
 
@@ -135,6 +111,30 @@ If you use a restore override, include both Compose files in these commands. A f
 
 Upgrading from 0.1.x migrates the database in place on first start (schema 2). That release cannot open a migrated store; rollback requires both the old release and a pre-upgrade backup. The variable names from before the renames, `BATON_*` and `HANDOFF_*`, still work as fallbacks. An old access-token file may remain from earlier releases, but this version does not read or create it. Task-claim tokens are unrelated to connection authentication: their hashes are stored with claims, while acquire receipts temporarily retain the raw token for retry recovery. See the [API reference](api.md) for the claim lifecycle.
 
+### Upgrading from Baton
+
+Stopover was called Baton before 0.13.0, and Handoff before that. Your data carries over; the database file is renamed automatically on first start. Two things change on your side.
+
+**1. Move the Docker data to the new volume.** Compose now names the volume `stopover_stopover_data`, so copy the old one across. Run these from the Stopover checkout:
+
+```sh
+docker stop baton && docker rm baton          # the old container; its volume stays
+docker volume create stopover_stopover_data
+docker run --rm -v baton_baton_data:/from:ro -v stopover_stopover_data:/to alpine sh -c 'cp -a /from/. /to/'
+docker compose up --build -d --wait
+```
+
+Check that the dashboard at <http://127.0.0.1:8765> shows your handoffs and memories. The old `baton_baton_data` volume is left untouched, so you can go back; delete it with `docker volume rm baton_baton_data` once you're happy.
+
+**2. Re-register your agents.** The MCP server is now named `stopover`, and the tools are `stopover_save`, `stopover_resume` and so on (they were `baton_*`). Remove the old `baton` entry and add the new one, for example:
+
+```sh
+claude mcp remove --scope user baton
+claude mcp add --scope user --transport http stopover http://127.0.0.1:8765/mcp
+```
+
+See [client setup](clients.md) for the other agents. Prompts change name too: `/mcp__baton__save` becomes `/mcp__stopover__save`. Environment variables can keep their `BATON_*` names, but `STOPOVER_*` is preferred.
+
 ## Import and export
 
 The CLI talks to the existing service through MCP. It never writes directly to SQLite.
@@ -151,4 +151,8 @@ A single-handoff export is not a complete database backup. An archival envelope 
 
 ## Security model
 
-The web/API and MCP listener are published only on IPv4 loopback. The service has no outbound API calls, telemetry, URL fetching, project filesystem mount or Docker socket mount. Stopover contents shown to an AI client can still be sent to that client's model provider. Do not put secrets in summaries. The web dashboard is a viewer; agents mutate handoffs and personal memories through MCP. Stopover requires no authentication. What it does check: the `Host` header must be well-formed and on the allowlist (`STOPOVER_ALLOWED_HOSTS`), which defends against DNS rebinding; when a browser sends an `Origin`, it must be the Stopover server itself; and other cross-site browser requests are refused using Fetch Metadata, except top-level navigations such as following a link. Native MCP clients send neither header and are unaffected. These checks reduce what a malicious web page can do through your browser, but they are not access control. Keep the published port on loopback and use Tailscale Serve with restricted tailnet access for remote connections. Anyone who can reach the service can access the shared inbox; do not expose this token-free service to the public internet.
+- **Network:** the dashboard, API and MCP endpoint are published only on IPv4 loopback. Keep it that way, and use [Tailscale Serve](remote-http.md) with restricted tailnet access for remote connections. **Do not expose Stopover to the public internet:** anyone who can reach it can read and change every handoff and memory.
+- **No authentication:** Stopover has no accounts or tokens. The request checks below reduce what a malicious web page can do through your browser; they are not access control.
+- **Request checks:** the `Host` header must be well-formed and on the allowlist (`STOPOVER_ALLOWED_HOSTS`), which defends against DNS rebinding. When a browser sends an `Origin`, it must be the Stopover server itself, and other cross-site browser requests are refused using Fetch Metadata (following a link is still allowed). Native MCP clients send neither header and are unaffected. Requests are limited to 64 KiB.
+- **What it never does:** no outbound API calls, telemetry or URL fetching, and no project filesystem or Docker socket mount. The dashboard is a viewer; agents make every change through MCP.
+- **Your data:** the database is not encrypted by Stopover, so protect the volume and backups. Anything an agent reads from Stopover can be sent to that agent's model provider, so don't save secrets in handoffs or memories.
