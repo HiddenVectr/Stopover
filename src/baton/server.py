@@ -94,7 +94,8 @@ def parse_authority(value):
     rest = value[match.end():]
     port = None
     if rest:
-        if not rest.startswith(":") or not rest[1:].isdigit() or len(rest) > 6:
+        # isascii: str.isdigit() also accepts characters such as "²", which int() then rejects.
+        if not rest.startswith(":") or not (rest[1:].isascii() and rest[1:].isdigit()) or len(rest) > 6:
             return None
         port = int(rest[1:])
         if not 1 <= port <= 65535:
@@ -125,7 +126,10 @@ def origin_allowed(origin, host_header):
     Compares host and port only: a proxy that terminates TLS (Tailscale Serve, a load balancer) makes the scheme
     differ. With no port in the Host header, the default port of either scheme matches.
     """
-    parts = urlsplit(origin)
+    try:
+        parts = urlsplit(origin)
+    except ValueError:  # e.g. "https://[" (an unclosed IPv6 bracket)
+        return False
     if parts.scheme not in ("http", "https") or parts.path or parts.query or parts.fragment or parts.username or parts.password:
         return False
     theirs, ours = parse_authority(parts.netloc), parse_authority(host_header)

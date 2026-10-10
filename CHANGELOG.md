@@ -5,6 +5,10 @@ minor release (0.x) can include breaking changes, for MCP clients or for hosts u
 `RequestContext`, the registry and `create_app` hooks). Every breaking change is marked **Breaking** here, with what
 to update. Patch releases (0.x.y) don't break anything.
 
+## Unreleased
+
+- Malformed `Host` and `Origin` headers (such as `Origin: https://[`, or a non-ASCII port) get a clean 403 instead of a 500 error.
+
 ## 0.12.0 — 2026-10-09
 
 Security and quality fixes from the public-release review.

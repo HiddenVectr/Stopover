@@ -1,3 +1,4 @@
+import anyio
 import pytest
 from starlette.testclient import TestClient
 
@@ -110,3 +111,28 @@ def test_committed_schemas_match_models():
     schemas = Path(__file__).resolve().parents[1] / "schemas"
     for name, model in {**INPUTS, "record": Record}.items():
         assert json.loads((schemas / f"{name}.json").read_text()) == model.model_json_schema(), name
+
+
+@pytest.mark.parametrize("headers", [
+    [(b"host", b"localhost:8765"), (b"origin", b"https://[")],
+    [(b"host", b"localhost:8765"), (b"origin", b"http://localhost:\xb2")],
+    [(b"host", b"localhost:\xb2")],
+    [(b"host", b"[::1")],
+    [(b"host", b"localhost:8765"), (b"origin", b"\xff\xfe")],
+])
+def test_malformed_headers_get_a_clean_403_not_a_crash(tmp_path, headers):
+    """Raw ASGI requests, because HTTP clients refuse to send some of these headers."""
+    app = create_app(tmp_path)
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": "GET", "path": "/api/overview", "raw_path": b"/api/overview", "query_string": b"",
+             "headers": headers, "scheme": "http", "server": ("127.0.0.1", 8765), "client": ("127.0.0.1", 1),
+             "asgi": {"version": "3.0"}, "http_version": "1.1", "root_path": ""}
+    anyio.run(app, scope, receive, send)
+    assert sent[0]["status"] == 403
