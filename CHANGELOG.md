@@ -6,7 +6,7 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
-- Short Claude Code commands: `/stopover-save`, `/stopover-resume`, `/stopover-inbox`, `/stopover-memory-update` and `/stopover-memory-import`, installed by copying `clients/claude-code-commands/` to `~/.claude/commands/` (see the usage guide).
+- Short Claude Code commands: `/stopover-save`, `/stopover-resume`, `/stopover-inbox`, `/stopover-memory-update` and `/stopover-memory-import`, installed by copying `clients/claude-code-commands/` to `~/.claude/commands/`, and the same five as Codex skills (`$stopover-save` and so on) in `clients/codex-skills/` (see the usage guide).
 
 - Docs: the implementation notes describe Stopover's own architecture only.
 

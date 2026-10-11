@@ -61,6 +61,15 @@ Start a new Claude Code session, then type `/stopover` to see them:
 
 They work with any server name you registered Stopover under. They are named `stopover-…` because Claude Code already has a built-in `/resume`.
 
+**Codex:** the same five are Codex skills. Install them once:
+
+```sh
+mkdir -p ~/.codex/skills
+cp -r clients/codex-skills/stopover-* ~/.codex/skills/
+```
+
+In a new Codex session, type `$stopover-save`, `$stopover-resume <id>`, `$stopover-inbox`, `$stopover-memory-update` or `$stopover-memory-import`, optionally followed by the same text as in Claude Code (for example `$stopover-save claude code the failing tests`). If `CODEX_HOME` is set, use `$CODEX_HOME/skills` instead of `~/.codex/skills`.
+
 **Other agents:** clients that support MCP prompts show Stopover's prompts as commands, named by the client (Claude Code also shows them, as `/mcp__stopover__save` and so on). The plain-language requests above work everywhere.
 
 ## Important limits
