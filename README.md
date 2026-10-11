@@ -48,7 +48,7 @@ In your connected agent, say:
 
 > Save a handoff so I can continue this conversation later.
 
-The agent saves a summary and gives you a prompt such as `Resume Handoff <id>`.
+The agent saves a summary and gives you a prompt such as `Resume Handoff <id>`. In Claude Code you can install [short commands](docs/usage.md#short-commands) such as `/stopover-save` and `/stopover-resume`.
 
 Connect your other agent to the same Stopover server, start a fresh session, and paste the prompt. It claims the handoff and continues using the saved context. You can also copy the prompt from the dashboard.
 

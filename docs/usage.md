@@ -40,17 +40,28 @@ For a clearly labeled example, run `docker exec stopover python -m stopover seed
 
 Claims coordinate agents, but do not lock project files. A claim can expire during long work, so agents should renew it if needed. Completion should describe observed results; a saved summary alone does not prove the work is finished.
 
-## Optional shortcuts
+## Short commands
 
-Clients that support MCP prompts show Stopover's prompts as commands. In Claude Code they appear as slash commands:
+**Claude Code:** install five short commands once, from your Stopover checkout:
+
+```sh
+mkdir -p ~/.claude/commands
+cp clients/claude-code-commands/*.md ~/.claude/commands/
+```
+
+Start a new Claude Code session, then type `/stopover` to see them:
 
 | Command | What it does |
 | --- | --- |
-| `/mcp__stopover__save [target] [focus]` | Saves the conversation; optionally names a receiving agent and what to emphasise. |
-| `/mcp__stopover__resume <id>` | Claims the handoff and continues it. If it is already claimed or completed, the agent reads and summarises it instead. |
-| `/mcp__stopover__inbox` | Lists handoffs that are ready to resume and asks which one to pick. |
+| `/stopover-save [agent] [focus]` | Saves the conversation as a handoff. Optionally name the agent that should pick it up and what to emphasise. |
+| `/stopover-resume [id]` | Resumes that handoff. Without an ID, lists the handoffs ready to resume and asks which one. |
+| `/stopover-inbox` | Lists handoffs that are ready to resume and asks which one to pick. |
+| `/stopover-memory-update [fact]` | Saves what the agent knows about you to your [personal memory](memory.md), or one fact you name. |
+| `/stopover-memory-import` | Loads your personal memory into the session. |
 
-Other clients name prompts differently; the plain-language requests above work everywhere. The memory commands are listed in [personal memory](memory.md#shortcuts).
+They work with any server name you registered Stopover under. They are named `stopover-…` because Claude Code already has a built-in `/resume`.
+
+**Other agents:** clients that support MCP prompts show Stopover's prompts as commands, named by the client (Claude Code also shows them, as `/mcp__stopover__save` and so on). The plain-language requests above work everywhere.
 
 ## Important limits
 

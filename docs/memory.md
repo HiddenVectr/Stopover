@@ -77,12 +77,12 @@ Open **Personal memories** in the dashboard. You can search, filter by category,
 
 ## Shortcuts
 
-Clients that support MCP prompts show two memory commands. In Claude Code:
+In Claude Code, after [installing Stopover's short commands](usage.md#short-commands):
 
 | Command | What it does |
 | --- | --- |
-| `/mcp__stopover__memory-update` | Saves everything the agent knows about you, as “Update my Stopover memory” does. |
-| `/mcp__stopover__memory-import` | Reads all your memories into the session, as “Import my Stopover memory” does. |
+| `/stopover-memory-update [fact]` | Saves everything the agent knows about you, as “Update my Stopover memory” does, or just the fact you name. |
+| `/stopover-memory-import` | Reads all your memories into the session, as “Import my Stopover memory” does. |
 
 ## Privacy
 

@@ -47,4 +47,4 @@ Deletion markers count toward the 10,000 memory-key limit; deletion removes cont
 
 ## Prompts
 
-The server exposes `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Client-specific shortcuts are described in [Using Stopover](usage.md#optional-shortcuts). Prompts provide instructions to the receiving agent; they do not start agents or execute work independently.
+The server exposes `save`, `resume`, `inbox`, `memory-update`, and `memory-import`. Client-specific shortcuts are described in [Using Stopover](usage.md#short-commands). Prompts provide instructions to the receiving agent; they do not start agents or execute work independently.
