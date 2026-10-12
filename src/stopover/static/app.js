@@ -23,6 +23,7 @@ function button(text, className, callback) {
 }
 
 function date(value) { return value ? new Date(value).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—'; }
+function day(value) { return value ? new Date(value).toLocaleDateString([], { dateStyle: 'medium' }) : '—'; }
 function relative(value) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value)) / 60000));
   return minutes < 1 ? 'Just now' : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -149,6 +150,26 @@ function renderList() {
   keepPlace(container, () => renderRows(container));
 }
 
+// "At a glance": what to know before choosing this handoff. The saving agent's summary when it wrote one; otherwise
+// (older handoffs) where things stand and the first next step.
+function glance(content, context, data) {
+  const box = el('section', 'glance');
+  box.setAttribute('aria-label', 'At a glance');
+  box.append(el('span', 'glance-label', 'At a glance'));
+  box.append(el('p', 'glance-summary', context.summary || context.current_state));
+  const first = context.next_steps[0];
+  if (!context.summary && !data.completion && first) {
+    const next = el('p', 'glance-next');
+    next.append(el('strong', '', 'Next: '), document.createTextNode(first.action));
+    box.append(next);
+  }
+  const facts = [`${context.next_steps.length} next step${context.next_steps.length === 1 ? '' : 's'}`];
+  if (context.open_questions.length) facts.push(`${context.open_questions.length} open question${context.open_questions.length === 1 ? '' : 's'}`);
+  if (data.completion) facts.unshift(`Completed: ${data.completion.outcome}`);
+  box.append(el('p', 'glance-facts', facts.join(' · ')));
+  content.append(box);
+}
+
 function renderRows(container) {
   container.replaceChildren();
   if (!state.items.length) {
@@ -261,6 +282,7 @@ function renderDetail(data) {
     header.append(el('p', 'claim-note', `In progress with ${data.claim.holder_label} until ${date(data.claim.expires_at)}.`));
   }
   const content = el('div', 'detail-content');
+  glance(content, context, data);
   if (data.completion) {
     const complete = section(content, 'Outcome');
     const card = el('div', 'detail-card outcome-card');
@@ -560,11 +582,78 @@ function renderMemoryRows(list) {
     const top = el('div', 'row-top');
     top.append(el('span', 'row-title mono-title', item.key), el('time', '', relative(item.updated_at)));
     const bottom = el('div', 'row-bottom');
-    bottom.append(el('span', 'badge', sentence(item.category.replaceAll('_', ' '))), el('span', 'agent-route', `${item.source.client} · ${item.basis}`));
+    bottom.append(el('span', 'badge' + (item.expired ? ' completed' : ''), item.expired ? 'Expired' : sentence(item.category.replaceAll('_', ' '))),
+                  el('span', 'agent-route', `${item.source.client} · ${item.basis}${item.expires_at && !item.expired ? ` · expires ${day(item.expires_at)}` : ''}`));
     row.append(top, el('div', 'row-preview', item.content), bottom);
     list.append(row);
   }
   $('memory-more').hidden = !memories.cursor;
+}
+
+// The summary above the list covers every memory, not just the loaded page: the agent-written profile.summary,
+// counts by category, what expires soon and how many have expired (agents no longer see those).
+const SUMMARY_KEY = 'profile.summary';
+const CATEGORY_NAMES = { preference: ['preference', 'preferences'], fact: ['fact', 'facts'], habit: ['habit', 'habits'],
+  goal: ['goal', 'goals'], project_context: ['project context item', 'project context items'] };
+let memorySummaryView = '';
+
+async function loadMemorySummary() {
+  let items = [], cursor = null;
+  for (let page = 0; page < 20; page += 1) {  // up to 1,000 memories
+    const query = new URLSearchParams({ limit: '50' });
+    if (cursor) query.set('cursor', cursor);
+    const response = await api('/api/memories?' + query);
+    items = items.concat(response.data.items);
+    cursor = response.data.next_cursor;
+    if (!cursor) break;
+  }
+  const view = JSON.stringify(items.map((item) => [item.key, item.revision, item.expired || false]));
+  if (view !== memorySummaryView) {
+    memorySummaryView = view;
+    renderMemorySummary(items, Boolean(cursor));
+  }
+}
+
+function renderMemorySummary(items, partial) {
+  const box = $('memory-summary');
+  const live = items.filter((item) => !item.deleted && !item.expired);
+  box.hidden = !live.length && !items.some((item) => item.expired);
+  if (box.hidden) return;
+  const profile = live.find((item) => item.key === SUMMARY_KEY);
+  const rest = live.filter((item) => item.key !== SUMMARY_KEY);
+  box.replaceChildren(el('span', 'glance-label', 'Summary'));
+  box.append(el('p', 'glance-summary', profile ? profile.content
+    : `Your agents share ${rest.length} memor${rest.length === 1 ? 'y' : 'ies'} about you. Ask one to “update my Stopover memory” to add a written summary here.`));
+  const counts = {};
+  for (const item of rest) counts[item.category] = (counts[item.category] || 0) + 1;
+  const chips = el('div', 'memory-counts');
+  for (const [category, [one, many]] of Object.entries(CATEGORY_NAMES)) {
+    if (!counts[category]) continue;
+    const chip = button(`${counts[category]} ${counts[category] === 1 ? one : many}`, 'count-chip', () => {
+      $('memory-category').value = category;
+      loadMemories();
+    });
+    chip.setAttribute('aria-label', `Show ${many}`);
+    chips.append(chip);
+  }
+  if (chips.childElementCount) box.append(chips);
+  const soon = rest.filter((item) => item.expires_at && new Date(item.expires_at) - Date.now() < 30 * 86400000)
+    .sort((a, b) => a.expires_at.localeCompare(b.expires_at));
+  if (soon.length) {
+    const list = el('ul', 'expiring');
+    for (const item of soon.slice(0, 5)) {
+      const entry = el('li');
+      const open = button(item.content, 'link-button', () => chooseMemory(item.key));
+      entry.append(open, el('span', 'muted', ` · expires ${day(item.expires_at)}`));
+      list.append(entry);
+    }
+    box.append(el('p', 'glance-facts', 'Expiring within 30 days'), list);
+  }
+  const expired = items.filter((item) => item.expired && !item.deleted).length;
+  const notes = [];
+  if (expired) notes.push(`${expired} expired memor${expired === 1 ? 'y is' : 'ies are'} no longer shared with agents`);
+  if (partial) notes.push('summary covers the first 1,000 memories');
+  if (notes.length) box.append(el('p', 'glance-facts', sentence(notes.join('; ')) + '.'));
 }
 
 async function loadMemories(append = false) {
@@ -608,6 +697,11 @@ function renderMemoryDetail(item) {
   if (item.deleted) {
     textSection(content, 'Forgotten', `This memory was removed from ${BRAND}. Its content and evidence are no longer stored. Other agents learn about the deletion the next time they import your memory.`);
   } else {
+    if (item.expires_at) {
+      textSection(content, item.expired ? 'Expired' : 'Expires', item.expired
+        ? `${date(item.expires_at)}. Agents no longer receive this memory; ask one to forget it, or to update it if it's still true.`
+        : date(item.expires_at));
+    }
     textSection(content, 'Category & basis', `${item.category.replaceAll('_', ' ')} · ${item.basis}`);
     textSection(content, 'Original source', item.source.client);
     if (item.source.model) textSection(content, 'Source model', item.source.model);
@@ -675,7 +769,7 @@ async function refreshMemories() {
   $('memory-refresh').disabled = true;
   try {
     await overview();
-    await loadMemories();
+    await Promise.all([loadMemories(), loadMemorySummary()]);
     if (memories.selected) await memoryDetail(memories.selected);
   } catch (exception) { memoryError(exception.message); }
   finally { $('memory-refresh').disabled = false; }
@@ -709,7 +803,7 @@ setInterval(async () => {
   if (memories.active) {
     try {
       await overview();
-      if (memories.pages === 1 && !$('memory-search').matches(':focus')) await loadMemories();
+      if (memories.pages === 1 && !$('memory-search').matches(':focus')) await Promise.all([loadMemories(), loadMemorySummary()]);
       if (memories.selected) await memoryDetail(memories.selected);
     } catch (exception) { memoryError(exception.message); }
     return;

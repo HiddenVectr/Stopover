@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
@@ -19,14 +19,33 @@ def _uuid(value):
         raise ValueError("must be a UUID such as 3f2b6c1e-8d4a-4b7e-9c2d-1a5e6f7b8c9d") from None
 
 
+def _expiry(value):
+    """A UTC date ("2026-12-31", meaning the end of that day) or date-time with a timezone, normalised to
+    YYYY-MM-DDTHH:MM:SSZ so stored values compare as text."""
+    if not isinstance(value, str):
+        raise ValueError("expires_at must be a date or date-time string")
+    text = value.strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        text += "T23:59:59Z"
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("expires_at must look like 2026-12-31 or 2026-12-31T17:00:00Z") from None
+    if parsed.utcoffset() is None:
+        raise ValueError("expires_at needs a timezone, e.g. 2026-12-31T17:00:00Z")
+    return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def _slug(value):
     return re.sub(r"\s+", "-", value.strip()) if isinstance(value, str) else value
 
 
 Text = Annotated[str, StringConstraints(min_length=1, max_length=8192)]
 Short = Annotated[str, StringConstraints(min_length=1, max_length=160)]
+Glance = Annotated[str, StringConstraints(max_length=300)]
 Slug = Annotated[str, BeforeValidator(_slug), StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,80}$")]
 UUID = Annotated[str, BeforeValidator(_uuid), WithJsonSchema({"type": "string", "format": "uuid"})]
+Expiry = Annotated[str, BeforeValidator(_expiry), WithJsonSchema({"type": "string", "description": "UTC date (2026-12-31) or date-time with a timezone"})]
 Texts = Annotated[list[Text], Field(max_length=20)]
 Positive = Annotated[int, Field(ge=1)]
 Token = Annotated[str, StringConstraints(min_length=32, max_length=128)]
@@ -90,6 +109,8 @@ class Step(Model):
 
 
 class Context(Model):
+    # One or two sentences for choosing what to resume at a glance: the work, where it stopped, the next step.
+    summary: Glance = ""
     objective: Text
     current_state: Text
     next_steps: list[Step] = Field(min_length=1, max_length=10)
@@ -292,6 +313,7 @@ class MemoryEntry(Model):
     basis: Literal["stated", "observed", "inferred"] = "stated"
     source: Source | None = Field(default=None, description="Original evidence source; defaults to the updating client. Kept unchanged when the content is unchanged.")
     evidence: Annotated[str, StringConstraints(max_length=2048)] = ""
+    expires_at: Expiry | None = Field(default=None, description="When this stops being true. Set it for anything time-bound (a deadline, a temporary situation); leave it out for lasting preferences and facts. Expired memories are left out of reads.")
     recreate: bool = Field(default=False, description="Re-establish a forgotten key. Only when the user has just freshly stated this memory, never from an old copy.")
 
 
@@ -319,6 +341,7 @@ class MemoryRead(Model):
     q: Annotated[str, StringConstraints(max_length=200)] = ""
     since_revision: Revision | None = Field(default=None, description="Return changes after this store revision, including deletion markers. Advance only after reading all pages.")
     include_deleted: bool = False
+    include_expired: bool = Field(default=False, description="Also return memories whose expires_at has passed (marked expired=true).")
     limit: Annotated[int, Field(ge=1, le=50)] = 20
     cursor: Annotated[str, StringConstraints(max_length=2048)] | None = None
 

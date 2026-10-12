@@ -14,11 +14,18 @@ TRUST_NOTICE = (
 )
 
 
-def item(row):
+def expired(row, now):
+    expires = (row["body"] or {}).get("expires_at")
+    return bool(expires) and expires <= utc(now)
+
+
+def item(row, now=None):
     result = {"id": row["id"], "key": row["key"], "revision": row["revision"],
               "created_at": utc(row["created"]), "updated_at": utc(row["updated"]), "deleted": row["deleted"]}
     if row["body"] is not None:
         result.update(row["body"])
+        if now is not None and expired(row, now):
+            result["expired"] = True
     return result
 
 
@@ -26,11 +33,11 @@ def revision(tx):
     return int(tx.get_meta("memory_revision") or 0)
 
 
-def read(tx, query):
+def read(tx, query, now):
     current = snapshot = revision(tx)
     if query["since_revision"] is not None and query["since_revision"] > current:
         raise DomainError("REVISION_CONFLICT", "Store revision is older than the requested checkpoint; perform a full read", current)
-    filters = digest({k: query[k] for k in ("key", "category", "q", "since_revision", "include_deleted")})
+    filters = digest({k: query[k] for k in ("key", "category", "q", "since_revision", "include_deleted", "include_expired")})
     after = ""
     if query["cursor"]:
         try:
@@ -48,12 +55,14 @@ def read(tx, query):
                             limit=query["limit"] + 1)
     page = rows[:query["limit"]]
     cursor = encode_cursor({"filter": filters, "revision": snapshot, "after": page[-1]["key"]}) if len(rows) > query["limit"] else None
-    return {"schema_version": "1.0", "store_revision": snapshot, "items": [item(row) for row in page],
+    # Expired memories are left out after paging, so a page can hold fewer than `limit` items; keep following next_cursor.
+    shown = [row for row in page if query["include_expired"] or row["deleted"] or not expired(row, now)]
+    return {"schema_version": "1.0", "store_revision": snapshot, "items": [item(row, now) for row in shown],
             "next_cursor": cursor, "complete": cursor is None, "trust_notice": TRUST_NOTICE}
 
 
-def export(tx, query):
-    data = read(tx, query)
+def export(tx, query, now):
+    data = read(tx, query, now)
     data["format"] = query["format"]
     if query["format"] == "markdown":
         lines = ["# Stopover personal memories", "", TRUST_NOTICE, "", f"Store revision: {data['store_revision']}", ""]
@@ -122,7 +131,10 @@ def apply(tx, name, request, now, max_memories):
             recreating = bool(row and row["deleted"])
             body = {k: v for k, v in entry.items() if k not in ("key", "expected_revision", "recreate")}
             previous = row["body"] if row and not recreating else None
-            if previous and all(previous[k] == body[k] for k in ("content", "category", "basis")):
+            if body.get("expires_at") and body["expires_at"] <= utc(now):
+                raise DomainError("VALIDATION_ERROR", f"{entry['key']}: expires_at {body['expires_at']} has passed; "
+                                  "don't save memories that are no longer true")
+            if previous and all(previous.get(k) == body.get(k) for k in ("content", "category", "basis", "expires_at")):
                 action = "unchanged"
             else:
                 if previous and previous["content"] == body["content"]:

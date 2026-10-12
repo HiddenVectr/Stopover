@@ -6,8 +6,12 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
-- Short Claude Code commands: `/stopover-save`, `/stopover-resume`, `/stopover-inbox`, `/stopover-memory-update` and `/stopover-memory-import`, installed by copying `clients/claude-code-commands/` to `~/.claude/commands/`, and the same five as Codex skills (`$stopover-save` and so on) in `clients/codex-skills/` (see the usage guide).
+## 0.15.0 — 2026-10-12
 
+- Personal memory is for lasting preferences and established facts: agents are told to keep task progress out of it and to give anything time-bound an expiry. Memories take an optional `expires_at` (a date or a date-time with a timezone); expired ones are left out of reads unless `include_expired=true`, and saving one that has already passed is refused. Changing only the expiry counts as an update.
+- Dashboard: **Personal memories** opens with a summary: the agent-maintained `profile.summary`, counts by category (select one to filter), what expires in the next 30 days, and how many have expired. Each memory shows its expiry; expired ones are marked.
+- Dashboard: **At a glance** at the top of each handoff says what it is, where it stopped and what's next, and the list shows that one-line summary under each title, so you can see what to resume without opening it. Agents write it in a new optional `context.summary` field (up to 300 characters); handoffs without one show where things stand and the first next step.
+- Short Claude Code commands: `/stopover-save`, `/stopover-resume`, `/stopover-inbox`, `/stopover-memory-update` and `/stopover-memory-import`, installed by copying `clients/claude-code-commands/` to `~/.claude/commands/`, and the same five as Codex skills (`$stopover-save` and so on) in `clients/codex-skills/` (see the usage guide).
 - Docs: the implementation notes describe Stopover's own architecture only.
 
 ## 0.14.0 — 2026-10-10

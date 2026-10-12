@@ -89,6 +89,11 @@ def summary(row, now):
                       "active": state == "claimed"}}
 
 
+def preview(context):
+    """The line under a handoff's title in lists: its summary, or the objective for handoffs saved without one."""
+    return (context.get("summary") or context["objective"])[:300]
+
+
 def detail(row, now):
     result = summary(row, now)
     result.update(record=row["record"], record_sha256=row["record_sha256"], completion=row["completion"],

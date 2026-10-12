@@ -71,6 +71,12 @@
     "Context": {
       "additionalProperties": false,
       "properties": {
+        "summary": {
+          "default": "",
+          "maxLength": 300,
+          "title": "Summary",
+          "type": "string"
+        },
         "objective": {
           "maxLength": 8192,
           "minLength": 1,

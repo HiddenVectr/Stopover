@@ -33,6 +33,7 @@ from stopover.sample import sample_record  # noqa: E402
 HANDOFFS = [
     dict(title="Fix refresh-token rotation in the auth service", project_key="acme-api", client="claude-code",
          target=None, objective="Rotate refresh tokens on every use and detect reuse of an old token.",
+         summary="Refresh-token rotation and reuse detection work; next, add the 30-day expiry tests, then document it.",
          state="Rotation and reuse detection are implemented. Expiry tests are still missing.",
          decision=("Expire mobile refresh tokens after 30 days", "Mobile users complained about weekly sign-outs."),
          steps=[("expiry-tests", "Add tests for 30-day expiry and reuse detection.", "pytest passes with the new tests."),
@@ -40,12 +41,14 @@ HANDOFFS = [
          criteria=["Reusing a rotated token revokes the whole token family.", "Tests cover expiry and reuse."]),
     dict(title="Migrate the billing worker to the new queue", project_key="acme-api", client="codex", target="claude-code",
          objective="Move the billing worker from the legacy cron to the job queue without double-charging.",
+         summary="The queue consumer is built behind a flag; next, make every charge idempotent before turning off the cron.",
          state="The queue consumer exists behind a flag. The cron job still runs in production.",
          decision=("Keep the cron as a fallback for one release", "Rollback must not need a deploy."),
          steps=[("idempotency", "Add an idempotency key to every charge.", "A replayed job never charges twice.")],
          criteria=["No customer is charged twice when a job is retried."]),
     dict(title="Speed up the dashboard's first load", project_key="acme-web", client="cursor", target=None,
          objective="Get the dashboard's first contentful paint under one second on a mid-range phone.",
+         summary="Charts are 41% of the first bundle; next, lazy-load them to get first paint under a second.",
          state="Bundle analysis done: the chart library is 41% of the initial bundle.",
          decision=("Lazy-load charts below the fold", "Most users never scroll to them."),
          steps=[("split", "Split the chart library into a lazy chunk.", "The initial bundle shrinks by at least 30%.")],
@@ -57,6 +60,9 @@ HANDOFFS = [
          criteria=["Every user-visible change in 2.4 is in the notes."]),
 ]
 MEMORIES = [
+    ("profile.summary", "A Python developer who switches between Claude Code and Codex. Prefers short answers with the "
+     "conclusion first, typed and small functions, and tests that pass before work is called done.", "fact"),
+    ("work.oncall", "On call for acme-api this week; keep suggestions low-risk.", "project_context", 5),
     ("communication.response_length", "Prefers short answers with the conclusion first.", "preference"),
     ("code.style.python", "Uses type hints and keeps functions small; follows the repository's existing style.", "preference"),
     ("workflow.commits", "Commit only when asked; never push without confirmation.", "preference"),
@@ -78,7 +84,7 @@ def record_for(spec) -> dict:
     record["source"].update(client=spec["client"], authoring_method="agent_summary", transfer_method="direct_mcp")
     record["coverage"] = {"basis": "Synthetic example data for documentation screenshots.", "omitted": []}
     context = record["context"]
-    context.update(objective=spec["objective"], current_state=spec["state"],
+    context.update(summary=spec.get("summary", ""), objective=spec["objective"], current_state=spec["state"],
                    background="Synthetic example for Stopover's documentation; not a real project.", constraints=[],
                    decisions=[{"decision": spec["decision"][0], "reason": spec["decision"][1], "evidence_ids": []}],
                    next_steps=[{"id": i, "action": a, "done_when": d} for i, a, d in spec["steps"]],
@@ -111,7 +117,10 @@ async def populate(url: str):
                                                                              "evidence": "Checked against the 2.4 milestone."}]}})
         await call("stopover_memory_update", {"operation_id": str(uuid.uuid4()), "client": "claude-code", "memories": [
             {"key": key, "content": content, "expected_revision": 0, "category": category, "basis": "stated",
-             "evidence": "Synthetic example for the documentation."} for key, content, category in MEMORIES]})
+             "evidence": "Synthetic example for the documentation.",
+             # A fourth value: the memory expires that many days from now.
+             **({"expires_at": time.strftime("%Y-%m-%d", time.gmtime(time.time() + rest[0] * 86400))} if rest else {})}
+            for key, content, category, *rest in MEMORIES]})
         return saved
 
 

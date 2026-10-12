@@ -82,6 +82,20 @@
           "title": "Evidence",
           "type": "string"
         },
+        "expires_at": {
+          "anyOf": [
+            {
+              "description": "UTC date (2026-12-31) or date-time with a timezone",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "When this stops being true. Set it for anything time-bound (a deadline, a temporary situation); leave it out for lasting preferences and facts. Expired memories are left out of reads.",
+          "title": "Expires At"
+        },
         "recreate": {
           "default": false,
           "description": "Re-establish a forgotten key. Only when the user has just freshly stated this memory, never from an old copy.",

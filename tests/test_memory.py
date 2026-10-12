@@ -269,3 +269,31 @@ def test_lenient_memory_inputs(store):
     current = success(store, 'read')['items'][0]
     assert current['source']['client'] == 'cursor' and current['category'] == 'fact'
     assert success(store, 'forget', {'memories': [{'key': 'editor-choice'}]})['items'][0]['action'] == 'deleted'
+
+
+def test_time_bound_memories_expire(store):
+    clock = [1_900_000_000.0]  # 2030-03-17
+    store.clock = lambda: clock[0]
+    lasting = entry('communication.length', 'Prefers concise answers.')
+    trial = entry('tools.trial', 'Trying Cursor until the end of the month.', expires_at='2030-03-31')
+    stamped = entry('work.oncall', 'On call this week.', expires_at='2030-03-20T09:00:00-04:00')
+    saved = success(store, 'update', update(lasting, trial, stamped))['items']
+    read = {i['key']: i for i in success(store, 'read', {})['items']}
+    assert read['tools.trial']['expires_at'] == '2030-03-31T23:59:59Z'  # a date means the end of that day, UTC
+    assert read['work.oncall']['expires_at'] == '2030-03-20T13:00:00Z' and read['communication.length']['expires_at'] is None
+    assert 'expired' not in read['tools.trial']
+    clock[0] = 1_900_000_000.0 + 10 * 86400  # 2030-03-27: the on-call memory has expired, the trial hasn't
+    assert {i['key'] for i in success(store, 'read', {})['items']} == {'communication.length', 'tools.trial'}
+    everything = {i['key']: i for i in success(store, 'read', {'include_expired': True})['items']}
+    assert everything['work.oncall']['expired'] is True and 'expired' not in everything['tools.trial']
+    assert {i['key'] for i in success(store, 'export', {})['items']} == {'communication.length', 'tools.trial'}
+    # Changing only the expiry is an update, not "unchanged".
+    revision = next(i['revision'] for i in saved if i['key'] == 'tools.trial')
+    extended = success(store, 'update', update(entry('tools.trial', 'Trying Cursor until the end of the month.',
+                                                                     revision, expires_at='2030-04-30')))['items'][0]
+    assert extended['action'] == 'updated'
+    # Something already over isn't saved, and an expiry needs a timezone.
+    past = store.execute('stopover_memory_update', update(entry('old.fact', 'Was true once.', expires_at='2030-03-01')))
+    assert past['error']['code'] == 'VALIDATION_ERROR' and 'has passed' in past['error']['message']
+    naive = store.execute('stopover_memory_update', update(entry('x.y', 'z', expires_at='2030-05-01T09:00:00')))
+    assert naive['error']['code'] == 'VALIDATION_ERROR'

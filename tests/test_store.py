@@ -331,3 +331,17 @@ def test_environment_variables_from_before_the_renames_still_work(monkeypatch):
     monkeypatch.setenv("STOPOVER_RETENTION_DAYS", "3")
     assert env("RETENTION_DAYS") == "3"
     assert env("NOT_SET", "default") == "default"
+
+
+def test_lists_show_the_summary_or_else_the_objective(store, record):
+    without = copy.deepcopy(record)
+    with_summary = copy.deepcopy(record)
+    with_summary["title"] = "Second"
+    with_summary["context"]["summary"] = "Rotation works; next, add the expiry tests."
+    for item in (without, with_summary):
+        assert store.execute("stopover_save", {"record": item})["ok"]
+    previews = {i["title"]: i["preview"] for i in store.execute("stopover_list", {"status": "all"})["data"]["items"]}
+    assert previews == {record["title"]: record["context"]["objective"][:300], "Second": "Rotation works; next, add the expiry tests."}
+    too_long = copy.deepcopy(record)
+    too_long["context"]["summary"] = "x" * 301
+    assert store.execute("stopover_save", {"record": too_long})["error"]["code"] == "VALIDATION_ERROR"

@@ -57,6 +57,12 @@
       "title": "Include Deleted",
       "type": "boolean"
     },
+    "include_expired": {
+      "default": false,
+      "description": "Also return memories whose expires_at has passed (marked expired=true).",
+      "title": "Include Expired",
+      "type": "boolean"
+    },
     "limit": {
       "default": 20,
       "maximum": 50,

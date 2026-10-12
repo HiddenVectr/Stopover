@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from . import catalog, memory
 from .backend import Backend
 from .context import LOCAL, RequestContext
-from .domain import (RECEIPT_TTL, DomainError, Policy, decode_cursor, detail, digest,
+from .domain import (RECEIPT_TTL, DomainError, Policy, decode_cursor, detail, digest, preview,
                      effective_status, encode_cursor, request_digest, resolve_completion, summary, token_hash, utc,
                      verify_claim)
 from .models import DEFAULT_LEASE, INPUTS, bounded_json
@@ -193,7 +193,7 @@ class StopoverService:
                                     q=request["q"], after=after, limit=limit + 1, now=now)
         page = rows[:limit]
         next_cursor = encode_cursor({"filter": filters, "at": page[-1]["created"], "id": page[-1]["id"]}) if len(rows) > limit else None
-        items = [{**summary(row, now), "preview": row["record"]["context"]["objective"][:240]} for row in page]
+        items = [{**summary(row, now), "preview": preview(row["record"]["context"])} for row in page]
         return {"items": items, "next_cursor": next_cursor}, False
 
     def _claim(self, tx, ctx, request, now):
@@ -260,11 +260,11 @@ class StopoverService:
     # Memory tools
     def memory_read(self, request, ctx, now):
         with self.backend.transaction(ctx) as tx:
-            return memory.read(tx, request), False
+            return memory.read(tx, request, now), False
 
     def memory_export(self, request, ctx, now):
         with self.backend.transaction(ctx) as tx:
-            return memory.export(tx, request), False
+            return memory.export(tx, request, now), False
 
     def memory_write(self, name, request, ctx, now):
         limit = self.policy_for(ctx).max_memories

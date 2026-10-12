@@ -19,6 +19,14 @@ You can use either feature without the other.
 | Changes | Never edited; a correction is saved as a new, linked handoff | Updated in place; each change raises the memory's revision |
 | What you say | “Save a handoff” and “Resume Handoff &lt;id&gt;” | “Update my Stopover memory” and “Import my Stopover memory” |
 
+## What belongs in memory
+
+Memory is for what stays true for a long time: your **lasting preferences, habits and goals**, and **established facts** about you and your ongoing work. Agents are told to save only those.
+
+- **Not memory:** task progress, today's plans, and anything else about the current piece of work. That belongs in a [handoff](usage.md).
+- **Time-bound facts get an expiry.** If something is true only until a known time (a deadline, a trial, being on call this week), the agent sets an expiry date. After it, agents no longer receive the memory; the dashboard still shows it, marked **Expired**, until you ask an agent to forget or update it.
+- **Things likely to change soon, with no known end,** aren't saved at all.
+
 ## What a memory looks like
 
 Each memory is one fact under a stable topic name, for example:
@@ -28,12 +36,16 @@ Each memory is one fact under a stable topic name, for example:
 | `communication.response_length` | Preference | Prefers concise answers with the command first. |
 | `tooling.package_manager` | Preference | Uses pnpm, not npm, for JavaScript projects. |
 | `work.current_focus` | Project context | Building a self-hosted MCP server in Python. |
+| `work.oncall` | Project context | On call for the API team until Friday (expires Friday). |
 
 Categories are **fact**, **preference**, **habit**, **goal** and **project context**. Each memory also records:
 
 - **basis:** whether you stated it, the agent observed it, or the agent inferred it;
 - **source:** which agent first saved it;
-- **revision:** a number that goes up whenever the memory changes, so two agents can't overwrite each other's edits.
+- **revision:** a number that goes up whenever the memory changes, so two agents can't overwrite each other's edits;
+- **expiry** (optional): when it stops being true.
+
+Agents also keep one memory called `profile.summary`: two to four sentences summing up your lasting preferences and key facts. The dashboard shows it first.
 
 Credentials and secrets don't belong in memory, and neither do the rules of a particular repository: keep those in the repository itself, where every contributor's agent finds them.
 
@@ -73,7 +85,7 @@ Forgetting doesn't reach old backups, exports, or copies an agent already saved 
 
 ## Browse your memories
 
-Open **Personal memories** in the dashboard. You can search, filter by category, and see each memory's source, revision and last update. The dashboard is read-only: ask an agent to make changes.
+Open **Personal memories** in the dashboard. A **summary** comes first: your agents' written profile summary, how many memories you have in each category (select one to filter the list), what expires in the next 30 days, and how many have expired. Below it you can search, filter by category, and see each memory's source, expiry, revision and last update. The dashboard is read-only: ask an agent to make changes.
 
 ## Shortcuts
 

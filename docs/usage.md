@@ -11,7 +11,7 @@ The dashboard lets you browse handoffs and copy resume prompts; you make changes
 3. Open a fresh session of another agent connected to the same server.
 4. Give it access to the project, then paste the resume prompt.
 
-The summary includes the goal, decisions, current progress, and next steps. It includes only context available to the agent, so check that important details were captured before leaving the original session.
+The summary includes the goal, decisions, current progress, and next steps, plus a one- or two-sentence summary that the dashboard shows at the top of the handoff and in the list. It includes only context available to the agent, so check that important details were captured before leaving the original session.
 
 You can name a preferred recipient: **“Save a handoff for Cursor.”** This adds a label; it does not launch Cursor or prevent another connected agent from resuming the handoff.
 
@@ -27,7 +27,7 @@ Open the dashboard. Search by title, project, or ID, or choose a status:
 | In progress | An agent holds a claim, normally for one hour. |
 | Completed | The attempt ended; its outcome may be succeeded, blocked, or abandoned. |
 
-Select a handoff to read its context and activity. **Copy resume prompt** gives you the text to paste into an agent. The dashboard is read-only and normally refreshes every 15 seconds. Use **Refresh** to check for changes immediately.
+Each handoff in the list shows its one-line summary, so you can see what to resume without opening it. Select a handoff to read its context and activity; **At a glance** at the top says what it is, where it stopped and what's next. **Copy resume prompt** gives you the text to paste into an agent. The dashboard is read-only and normally refreshes every 15 seconds. Use **Refresh** to check for changes immediately.
 
 For a clearly labeled example, run `docker exec stopover python -m stopover seed-demo`. The app does not create examples automatically.
 

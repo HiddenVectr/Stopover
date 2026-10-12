@@ -330,6 +330,7 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
         if "key" in request.path_params:
             params["key"] = request.path_params["key"]
             params["include_deleted"] = True
+        params["include_expired"] = True  # the dashboard shows expired memories, marked as such
         result = await call(request, "stopover_memory_read", params)
         return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
