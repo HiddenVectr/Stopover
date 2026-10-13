@@ -6,6 +6,8 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+## 0.16.0 — 2026-10-13
+
 - `STOPOVER_INACTIVE_DAYS`: delete handoffs of any status that nobody has changed for that many days (a handoff with an unexpired claim is kept). Useful because agents don't always mark work complete.
 - The memory limit counts live memories only, so forgetting one frees room; recreating a forgotten memory counts again. Limit errors now say what the limit is and tell the agent to ask you what to delete or forget.
 

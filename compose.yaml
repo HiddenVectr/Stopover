@@ -2,7 +2,7 @@ name: stopover
 services:
   stopover:
     build: .
-    image: stopover:0.15.0
+    image: stopover:0.16.0
     container_name: stopover
     restart: unless-stopped
     ports:
