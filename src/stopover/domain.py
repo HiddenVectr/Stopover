@@ -24,6 +24,8 @@ class Policy:
     max_memories: int = MAX_MEMORIES
     max_receipts: int = MAX_RECEIPTS
     retention_days: float | None = None  # Delete completed handoffs after this many days.
+    # Delete handoffs of any status that nobody has changed for this many days (an active claim keeps one).
+    inactive_days: float | None = None
 
 
 class DomainError(Exception):

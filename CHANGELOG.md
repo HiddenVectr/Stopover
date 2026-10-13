@@ -6,6 +6,9 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+- `STOPOVER_INACTIVE_DAYS`: delete handoffs of any status that nobody has changed for that many days (a handoff with an unexpired claim is kept). Useful because agents don't always mark work complete.
+- The memory limit counts live memories only, so forgetting one frees room; recreating a forgotten memory counts again. Limit errors now say what the limit is and tell the agent to ask you what to delete or forget.
+
 ## 0.15.0 — 2026-10-12
 
 - Personal memory is for lasting preferences and established facts: agents are told to keep task progress out of it and to give anything time-bound an expiry. Memories take an optional `expires_at` (a date or a date-time with a timezone); expired ones are left out of reads unless `include_expired=true`, and saving one that has already passed is refused. Changing only the expiry counts as an update.

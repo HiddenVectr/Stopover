@@ -8,8 +8,9 @@ from .sqlite_backend import SQLiteBackend
 
 
 class Store(StopoverService):
-    def __init__(self, directory, clock=time.time, retention_days=None, registry: Registry | None = None):
-        super().__init__(SQLiteBackend(directory, clock=clock), clock=clock, retention_days=retention_days, registry=registry)
+    def __init__(self, directory, clock=time.time, retention_days=None, registry: Registry | None = None, inactive_days=None):
+        super().__init__(SQLiteBackend(directory, clock=clock), clock=clock, retention_days=retention_days,
+                         inactive_days=inactive_days, registry=registry)
 
     @property
     def db(self):

@@ -121,6 +121,10 @@ class SQLiteTransaction(Transaction):
     def completed_before(self, cutoff):
         return [r[0] for r in self.db.execute("SELECT id FROM handoffs WHERE status='completed' AND updated<?", (cutoff,))]
 
+    def inactive_before(self, cutoff, now):
+        return [r[0] for r in self.db.execute("SELECT id FROM handoffs WHERE updated<? AND NOT (status='claimed' AND expires>?)",
+                                              (cutoff, now))]
+
     def overview(self, now):
         rows = self.db.execute("SELECT CASE WHEN status='claimed' AND expires<=? THEN 'available' ELSE status END AS state,"
                                "count(*) AS count FROM handoffs GROUP BY state", (now,)).fetchall()

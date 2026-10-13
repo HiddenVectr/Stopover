@@ -35,11 +35,11 @@ class StopoverService:
     memory.forgotten, plus IDs, revisions and timestamps. They never contain handoff or memory content.
     Failures in the handler are logged and do not affect the request.
     """
-    def __init__(self, backend: Backend, *, clock=time.time, retention_days=None, registry: Registry | None = None,
+    def __init__(self, backend: Backend, *, clock=time.time, retention_days=None, inactive_days=None, registry: Registry | None = None,
                  policy: Policy | Callable[[RequestContext], Policy] | None = None, on_event: EventHandler | None = None):
         self.backend = backend
         self.clock = clock
-        self.policy = policy if policy is not None else Policy(retention_days=retention_days)
+        self.policy = policy if policy is not None else Policy(retention_days=retention_days, inactive_days=inactive_days)
         self.registry = registry or core_registry()
         self.on_event = on_event
         self._local = threading.local()
@@ -131,6 +131,10 @@ class StopoverService:
             for handoff_id in tx.completed_before(now - policy.retention_days * 86400):
                 tx.delete_handoff(handoff_id)
                 self._record({"type": "handoff.deleted", "handoff_id": handoff_id, "reason": "retention", "at": utc(now)})
+        if policy.inactive_days:
+            for handoff_id in tx.inactive_before(now - policy.inactive_days * 86400, now):
+                tx.delete_handoff(handoff_id)
+                self._record({"type": "handoff.deleted", "handoff_id": handoff_id, "reason": "inactive", "at": utc(now)})
 
     def _event(self, tx, ctx, handoff_id, event, now, revision, details):
         if ctx.actor:
@@ -157,8 +161,10 @@ class StopoverService:
     def push(self, request, ctx, now):
         def apply(tx, now):
             record = request["record"]
-            if tx.count_handoffs() >= self.policy_for(ctx).max_handoffs:
-                raise DomainError("STORE_FULL", "Handoff limit reached; delete old handoffs or set STOPOVER_RETENTION_DAYS")
+            limit = self.policy_for(ctx).max_handoffs
+            if tx.count_handoffs() >= limit:
+                raise DomainError("STORE_FULL", f"Handoff limit reached ({limit} saved handoffs). Ask the user which old handoffs "
+                                  "to delete with stopover_delete, then save again.")
             if record["parent_id"]:
                 self._row(tx, record["parent_id"])
             sha = hashlib.sha256(bounded_json(record).encode()).hexdigest()

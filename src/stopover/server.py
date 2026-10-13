@@ -275,8 +275,9 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
     """
     if service is None:
         directory = directory or env("DATA_DIR", "/data")
-        retention = env("RETENTION_DAYS")
-        service = Store(directory, retention_days=float(retention) if retention else None)
+        retention, inactive = env("RETENTION_DAYS"), env("INACTIVE_DAYS")
+        service = Store(directory, retention_days=float(retention) if retention else None,
+                        inactive_days=float(inactive) if inactive else None)
     if allowed_hosts is None:
         allowed_hosts = [*DEFAULT_ALLOWED_HOSTS, *parse_hosts(env("ALLOWED_HOSTS"))]
     server = make_mcp(service)

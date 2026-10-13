@@ -38,6 +38,9 @@ class Transaction(ABC):
     @abstractmethod
     def completed_before(self, cutoff) -> list[str]: ...
     @abstractmethod
+    def inactive_before(self, cutoff, now) -> list[str]:
+        """IDs of handoffs last changed before cutoff, in any status, except those with a claim still active at now."""
+    @abstractmethod
     def overview(self, now) -> dict:
         """{"counts": {available, claimed, completed}, "memories": int, "projects": [...], "targets": [...]}"""
 

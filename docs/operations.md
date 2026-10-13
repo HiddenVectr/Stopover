@@ -11,6 +11,7 @@ Set these in the Compose service's `environment` (or the shell, when running wit
 | `STOPOVER_DATA_DIR` | `/data` | Directory holding the SQLite database. Same as `--data-dir`. |
 | `STOPOVER_ALLOWED_HOSTS` | (empty) | Extra `Host` names or IPs to accept, comma-separated, besides `localhost`, `127.0.0.1`, `::1` and `*.ts.net`. A leading `*.` matches subdomains; `*` turns the check off. |
 | `STOPOVER_RETENTION_DAYS` | (unset) | Delete completed handoffs older than this many days. |
+| `STOPOVER_INACTIVE_DAYS` | (unset) | Delete handoffs of any status that nobody has changed for this many days. A handoff an agent is actively working on (an unexpired claim) is kept. |
 | `STOPOVER_URL` | `http://127.0.0.1:8765/mcp` | MCP URL used by the `import` and `export` CLI commands. |
 
 ## Storage, restart and backup
@@ -94,7 +95,7 @@ These recipes use Docker's [volume backup and restore](https://docs.docker.com/e
 
 ## Retention
 
-Delete individual handoffs by asking an agent to use `stopover_delete`. To remove completed handoffs automatically, set `STOPOVER_RETENTION_DAYS` (for example `90`) in the Compose service's `environment`; old completed records and their history are removed during later writes. Personal memories are retained separately.
+Delete individual handoffs by asking an agent to use `stopover_delete`. To remove completed handoffs automatically, set `STOPOVER_RETENTION_DAYS` (for example `90`) in the Compose service's `environment`; old completed records and their history are removed during later writes. To also clear out handoffs that were never completed, set `STOPOVER_INACTIVE_DAYS`: any handoff nobody has saved, claimed or completed for that many days is removed, unless an agent holds an unexpired claim on it. Personal memories are retained separately.
 
 ## Updates and older installations
 

@@ -230,6 +230,35 @@ def test_conformance_policy_limits(make_service, record):
     assert service.execute("stopover_memory_update", update(entry("a.two")))["error"]["code"] == "STORE_FULL"
 
 
+def test_conformance_inactive_handoffs_are_removed(make_service, record):
+    clock = [T0]
+    service = make_service(clock=lambda: clock[0], policy=Policy(inactive_days=30))
+    idle = push(service, record)
+    held = push(service, record)
+    ok(service.execute("stopover_claim", {"id": held["id"], "holder_label": "codex", "lease_seconds": 86400}))
+    clock[0] += 29 * 86400
+    touched = push(service, record)  # any write runs the cleanup; nothing is old enough yet
+    assert service.execute("stopover_get", {"id": idle["id"]})["ok"]
+    clock[0] += 2 * 86400
+    push(service, record)
+    assert service.execute("stopover_get", {"id": idle["id"]})["error"]["code"] == "NOT_FOUND"  # untouched for 31 days
+    assert service.execute("stopover_get", {"id": held["id"]})["error"]["code"] == "NOT_FOUND"  # its claim expired long ago
+    assert service.execute("stopover_get", {"id": touched["id"]})["ok"]
+
+
+def test_conformance_forgetting_frees_memory_room(make_service):
+    service = make_service(policy=Policy(max_memories=2))
+    ok(service.execute("stopover_memory_update", update(entry("a.one"), entry("a.two"))))
+    full = service.execute("stopover_memory_update", update(entry("a.three")))
+    assert full["error"]["code"] == "STORE_FULL" and "2 memories" in full["error"]["message"]
+    ok(service.execute("stopover_memory_forget", {"memories": [{"key": "a.one"}]}))
+    ok(service.execute("stopover_memory_update", update(entry("a.three"))))
+    # Recreating the forgotten key counts toward the limit again.
+    marker = next(i for i in ok(service.execute("stopover_memory_read", {"key": "a.one", "include_deleted": True}))["items"])
+    again = service.execute("stopover_memory_update", update(entry("a.one", revision=marker["revision"], recreate=True)))
+    assert again["error"]["code"] == "STORE_FULL"
+
+
 def test_conformance_clock_moving_backward(clocked, record):
     service, clock = clocked
     saved = push(service, record)
