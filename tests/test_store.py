@@ -341,7 +341,14 @@ def test_lists_show_the_summary_or_else_the_objective(store, record):
     for item in (without, with_summary):
         assert store.execute("stopover_save", {"record": item})["ok"]
     previews = {i["title"]: i["preview"] for i in store.execute("stopover_list", {"status": "all"})["data"]["items"]}
-    assert previews == {record["title"]: record["context"]["objective"][:300], "Second": "Rotation works; next, add the expiry tests."}
+    assert previews == {record["title"]: " ".join(record["context"]["objective"].split())[:240], "Second": "Rotation works; next, add the expiry tests."}
+    # Summaries can be a paragraph or two; lists show the start, cut at a word.
+    long = copy.deepcopy(record)
+    long["title"] = "Third"
+    long["context"]["summary"] = ("Word " * 200).strip()
+    assert store.execute("stopover_save", {"record": long})["ok"]
+    previews = {i["title"]: i["preview"] for i in store.execute("stopover_list", {"status": "all"})["data"]["items"]}
+    assert previews["Third"].endswith("Word…") and len(previews["Third"]) <= 241
     too_long = copy.deepcopy(record)
-    too_long["context"]["summary"] = "x" * 301
+    too_long["context"]["summary"] = "x" * 1201
     assert store.execute("stopover_save", {"record": too_long})["error"]["code"] == "VALIDATION_ERROR"

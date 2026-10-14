@@ -53,7 +53,7 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         page.get_by_role("button", name="Clear filters").click()
         expect(row).to_be_visible()
         expect(page.get_by_label("Search handoffs")).to_have_value("")
-        page.get_by_role("button", name="Completed", exact=False).first.click()
+        page.locator('[data-status="completed"]').click()
         expect(page.get_by_text("No matching handoffs.")).to_be_visible()
         page.locator('[data-status="all"]').click()
         expect(row).to_be_visible()
@@ -227,7 +227,10 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
         return JSONResponse({"user": {"login": "alice", "name": "Alice Example"}, "workspace": {"name": "Alice's workspace"},
                              "logout_url": "/fake-logout", "access_token_url": "/settings/tokens",
                              "links": [{"label": "Access tokens", "url": "/settings/tokens"},
-                                       {"label": "Elsewhere", "url": "https://evil.example/"}, {"label": "Protocol", "url": "//evil.example"}]})
+                                       {"label": "Elsewhere", "url": "https://evil.example/"}, {"label": "Protocol", "url": "//evil.example"}],
+                             "usage": {"title": "Free plan", "url": "/settings/tokens#plan", "items": [
+                                 {"label": "Changes today", "used": 200, "limit": 200}, {"label": "Saved handoffs", "used": 12, "limit": 50},
+                                 {"label": "Memories", "used": 3, "limit": None}, {"label": "Broken", "used": "x"}]}})
 
     app = create_app(tmp_path, auth=auth, login_url="/fake-login", extra_routes=[
         Route("/fake-login", login), Route("/fake-login/complete", complete),
@@ -259,6 +262,14 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
             # Host links: same-origin only.
             expect(page.locator("#host-links a")).to_have_count(1)
             expect(page.get_by_role("link", name="Access tokens")).to_have_attribute("href", "/settings/tokens")
+            # Plan usage from the host: what's left of each limit; malformed items are skipped.
+            usage = page.locator("#host-usage")
+            expect(usage.locator(".usage-item")).to_have_count(3)
+            expect(usage).to_contain_text("Free plan")
+            expect(usage.locator(".usage-head.out")).to_have_text("Changes today0 of 200 left")
+            expect(usage).to_contain_text("38 of 50 left")
+            expect(usage).to_contain_text("No limit")
+            expect(usage.get_by_role("link", name="Details")).to_have_attribute("href", "/settings/tokens#plan")
             # Phones: account links and Sign out sit behind the account button, not in the top bar.
             page.set_viewport_size({"width": 390, "height": 844})
             expect(page.locator("#host-links")).to_be_hidden()
@@ -267,6 +278,7 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
             expect(sheet).to_contain_text("Alice's workspace")
             expect(sheet.get_by_role("link", name="Access tokens")).to_have_attribute("href", "/settings/tokens")
             expect(sheet.get_by_role("button", name="Sign out")).to_be_visible()
+            expect(sheet.locator("#account-usage")).to_contain_text("38 of 50 left")
             page.get_by_role("button", name="Close account menu").click()
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             page.set_viewport_size({"width": 1280, "height": 900})
@@ -344,4 +356,65 @@ def test_refresh_keeps_keyboard_focus_on_the_list(live_server, record):
         page.clock.run_for(16000)
         expect(page.locator(".handoff-row").filter(has_text="Arrived during refresh")).to_be_visible()
         assert page.evaluate("document.activeElement.dataset.key") == focused_id
+        browser.close()
+
+
+def test_inbox_groups_by_project_answers_questions_and_deletes(live_server, record):
+    import copy
+    url = live_server["url"]
+    def save(title, project, questions=()):
+        data = copy.deepcopy(record)
+        data.update(title=title, project_key=project)
+        data["context"]["open_questions"] = list(questions)
+        data["context"]["summary"] = (f"{title} is about half done. The parser reads every report format we support, its unit "
+                                      "tests pass, and we chose streaming over buffering so large reports don't run out of memory.\n\n"
+                                      "It stopped before the export screen. Next, wire the parser into that screen, then confirm "
+                                      "which columns belong in the file before writing the end-to-end test.")
+        return asyncio.run(call_remote(url + "/mcp", "stopover_save", {"operation_id": str(uuid.uuid4()), "record": data}))["data"]["id"]
+    save("Fix login", "api")
+    asking = save("Add CSV export", "web", ["Which columns go in the export?"])
+    save("Loose note", None)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.goto(url)
+        # Grouped by project, newest project first; handoffs without a project come last.
+        expect(page.locator(".group-heading")).to_have_count(3)
+        assert [t.split("\n")[0] for t in page.locator(".group-heading").all_inner_texts()] == ["web", "api", "No project"]
+        expect(page.locator("#count-needs_you")).to_have_text("1")
+        page.locator('[data-status="needs_you"]').click()
+        expect(page.locator(".handoff-row")).to_have_count(1)
+        row = page.locator(".handoff-row").filter(has_text="Add CSV export")
+        expect(row).to_contain_text("1 question for you")
+        row.click()
+        # The summary sits at the top, as paragraphs.
+        expect(page.locator(".detail-header .glance-summary")).to_have_count(2)
+        page.get_by_label("Your answer to: Which columns go in the export?").fill("Date, amount and payee")
+        page.get_by_role("button", name="Save answer").click()
+        expect(page.locator("#toast")).to_have_text("Answer saved")
+        expect(page.locator(".question-card .answer")).to_have_text("Date, amount and payee")
+        expect(page.locator("#count-needs_you")).to_have_text("0")
+        expect(page.get_by_text("Nothing needs you right now.")).to_be_visible()
+        # Playwright runs its own event loop here, so the MCP call goes on another thread.
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(1) as pool:
+            resumed = pool.submit(asyncio.run, call_remote(url + "/mcp", "stopover_resume", {"id": asking, "holder_label": "codex"})).result()["data"]
+        assert resumed["answers"][0]["answer"] == "Date, amount and payee"
+        # Deleting asks first, and warns that an agent has it.
+        page.reload()
+        page.get_by_role("button", name="Delete", exact=True).click()
+        expect(page.locator("#delete-text")).to_contain_text("codex has picked this up")
+        page.get_by_role("button", name="Cancel").click()
+        expect(page.locator("#detail h2")).to_have_text("Add CSV export")
+        page.get_by_role("button", name="Delete", exact=True).click()
+        page.get_by_role("button", name="Delete handoff").click()
+        expect(page.locator("#toast")).to_have_text("Handoff deleted")
+        page.locator('[data-status="all"]').click()
+        expect(page.locator(".handoff-row")).to_have_count(2)
+        expect(page.locator(".group-heading")).to_have_count(2)
+        page.set_viewport_size({"width": 390, "height": 844})
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+        assert not errors, errors
         browser.close()

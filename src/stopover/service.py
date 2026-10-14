@@ -15,14 +15,15 @@ from pydantic import ValidationError
 from . import catalog, memory
 from .backend import Backend
 from .context import LOCAL, RequestContext
-from .domain import (RECEIPT_TTL, DomainError, Policy, decode_cursor, detail, digest, preview,
-                     effective_status, encode_cursor, request_digest, resolve_completion, summary, token_hash, utc,
-                     verify_claim)
-from .models import DEFAULT_LEASE, INPUTS, bounded_json
+from .domain import (RECEIPT_TTL, DomainError, Policy, decode_cursor, detail, digest, latest_answers, needs_you,
+                     preview, effective_status, encode_cursor, request_digest, resolve_completion, summary, token_hash,
+                     utc, verify_claim)
+from .models import DEFAULT_LEASE, INPUTS, Answers, Delete, bounded_json
 from .registry import Prompt, Registry, Tool
 
 
 log = logging.getLogger("stopover")
+NEEDS_YOU_SCAN_PAGES = 50  # "Needs you" scans up to this many pages of 100 handoffs.
 EventHandler = Callable[[RequestContext, dict], None]
 
 
@@ -31,8 +32,8 @@ class StopoverService:
 
     policy: a Policy, or a function returning one for a RequestContext (limits and retention per workspace).
     on_event: called after each commit with (ctx, event). Events are dicts with a "type" of handoff.pushed,
-    handoff.acquire, handoff.renew, handoff.release, handoff.completed, handoff.deleted, memory.updated or
-    memory.forgotten, plus IDs, revisions and timestamps. They never contain handoff or memory content.
+    handoff.acquire, handoff.renew, handoff.release, handoff.completed, handoff.answered, handoff.deleted,
+    memory.updated or memory.forgotten, plus IDs, revisions and timestamps. They never contain handoff or memory content.
     Failures in the handler are logged and do not affect the request.
     """
     def __init__(self, backend: Backend, *, clock=time.time, retention_days=None, inactive_days=None, registry: Registry | None = None,
@@ -77,13 +78,17 @@ class StopoverService:
             now = self.clock()
             data, replayed = tool.handler(self, request, ctx, now)
             return {"ok": True, "data": data, "server_time": utc(now), "replayed": replayed}
-        except ValidationError as exc:
+        except (ValidationError, DomainError, ValueError, TypeError) as exc:
+            return self._failure(exc)
+
+    def _failure(self, exc):
+        # ValidationError is a ValueError, so it's checked first.
+        if isinstance(exc, ValidationError):
             problems = [f'{".".join(map(str, e["loc"])) or "request"}: {e["msg"][:200]}' for e in exc.errors(include_input=False)]
             return self._error("VALIDATION_ERROR", "; ".join(problems[:8]))
-        except DomainError as exc:
+        if isinstance(exc, DomainError):
             return self._error(exc.code, str(exc), exc.revision, exc.details)
-        except (ValueError, TypeError):
-            return self._error("VALIDATION_ERROR", "Invalid or oversized request")
+        return self._error("VALIDATION_ERROR", "Invalid or oversized request")
 
     def _error(self, code, message, revision=None, details=None):
         error = {"code": code, "message": message, "retryable": code in ("STORE_BUSY", "STORE_UNAVAILABLE")}
@@ -143,6 +148,23 @@ class StopoverService:
         self._record({"type": f"handoff.{event}", "handoff_id": handoff_id, "revision": revision, "at": utc(now), "details": details})
 
     @staticmethod
+    def _answers(tx, row):
+        """The user's latest answer to each of this handoff's open questions (stored as "answered" events)."""
+        questions = row["record"]["context"]["open_questions"]
+        if not questions:
+            return []
+        events, before = [], None
+        while True:
+            page = tx.list_events(row["id"], before, 200)
+            events += page
+            if len(page) < 200:
+                return latest_answers(questions, events)
+            before = page[-1]["sequence"]
+
+    def _detail(self, tx, row, now):
+        return {**detail(row, now), "answers": self._answers(tx, row)}
+
+    @staticmethod
     def _row(tx, handoff_id):
         row = tx.get_handoff(handoff_id)
         if row is None:
@@ -179,7 +201,7 @@ class StopoverService:
 
     def get(self, request, ctx, now):
         with self.backend.transaction(ctx) as tx:
-            return detail(self._row(tx, request["id"]), now), False
+            return self._detail(tx, self._row(tx, request["id"]), now), False
 
     def list(self, request, ctx, now):
         filters = digest({k: request[k] for k in ("status", "project_key", "target_client", "q")})
@@ -192,14 +214,31 @@ class StopoverService:
             except ValueError:
                 raise DomainError("INVALID_CURSOR", "Refresh the list; the cursor is invalid for these filters") from None
             after = (cursor["at"], cursor["id"])
-        limit = request["limit"]
+        limit, answers = request["limit"], {}
+        filters_for = dict(project_key=request["project_key"], target_client=request["target_client"], q=request["q"], now=now)
         with self.backend.transaction(ctx) as tx:
-            rows = tx.list_handoffs(status=None if request["status"] == "all" else request["status"],
-                                    project_key=request["project_key"], target_client=request["target_client"],
-                                    q=request["q"], after=after, limit=limit + 1, now=now)
-        page = rows[:limit]
+            def answered(row):
+                if row["id"] not in answers:
+                    answers[row["id"]] = self._answers(tx, row)
+                return answers[row["id"]]
+            if request["status"] == "needs_you":
+                # Not a stored status: scan newest first and keep the open handoffs with unanswered questions.
+                rows, scan = [], after
+                for _ in range(NEEDS_YOU_SCAN_PAGES):
+                    batch = tx.list_handoffs(status=None, after=scan, limit=100, **filters_for)
+                    rows += [row for row in batch if needs_you(row, answered(row))]
+                    if len(rows) > limit or len(batch) < 100:
+                        break
+                    scan = (batch[-1]["created"], batch[-1]["id"])
+                rows = rows[:limit + 1]
+            else:
+                rows = tx.list_handoffs(status=None if request["status"] == "all" else request["status"],
+                                        after=after, limit=limit + 1, **filters_for)
+            page = rows[:limit]
+            items = [{**summary(row, now), "preview": preview(row["record"]["context"]),
+                      "questions": {"open": len(row["record"]["context"]["open_questions"]), "answered": len(answered(row))},
+                      "needs_you": needs_you(row, answered(row))} for row in page]
         next_cursor = encode_cursor({"filter": filters, "at": page[-1]["created"], "id": page[-1]["id"]}) if len(rows) > limit else None
-        items = [{**summary(row, now), "preview": preview(row["record"]["context"])} for row in page]
         return {"items": items, "next_cursor": next_cursor}, False
 
     def _claim(self, tx, ctx, request, now):
@@ -237,7 +276,7 @@ class StopoverService:
         claim, replayed = self._write(ctx, "handoff", "stopover_resume", request, now,
                                       lambda tx, now: self._claim(tx, ctx, {**request, "action": "acquire"}, now))
         with self.backend.transaction(ctx) as tx:
-            data = detail(self._row(tx, request["id"]), now)
+            data = self._detail(tx, self._row(tx, request["id"]), now)
         data.update(claim_token=claim.get("claim_token"), claim_generation=claim["claim_generation"], receipt_at=claim["receipt_at"])
         return data, replayed
 
@@ -253,10 +292,10 @@ class StopoverService:
             return {**summary(tx.get_handoff(row["id"]), now), "outcome": completion["outcome"]}
         return self._write(ctx, "handoff", "stopover_complete", request, now, apply)
 
-    def delete(self, request, ctx, now):
+    def delete(self, request, ctx, now, force=False):
         with self.backend.transaction(ctx, write=True) as tx:
             row = self._row(tx, request["id"])
-            if effective_status(row, now) == "claimed":
+            if not force and effective_status(row, now) == "claimed":
                 raise DomainError("ALREADY_CLAIMED", "Release the active claim before deleting", row["revision"])
             tx.delete_handoff(row["id"])
         self._emit(ctx, [{"type": "handoff.deleted", "handoff_id": row["id"], "reason": "request", "at": utc(now),
@@ -287,10 +326,62 @@ class StopoverService:
 
     # Dashboard helpers
     def overview(self, ctx: RequestContext | None = None):
+        now = self.clock()
         with self.backend.transaction(ctx or LOCAL) as tx:
-            data = tx.overview(self.clock())
-        return {"counts": data["counts"], "total": sum(data["counts"].values()), "memories": data["memories"],
-                "projects": data["projects"], "targets": data["targets"]}
+            data = tx.overview(now)
+            waiting = 0
+            for status in ("available", "claimed"):
+                after = None
+                for _ in range(NEEDS_YOU_SCAN_PAGES):
+                    batch = tx.list_handoffs(status=status, project_key=None, target_client=None, q="", after=after, limit=100, now=now)
+                    waiting += sum(needs_you(row, self._answers(tx, row)) for row in batch)
+                    if len(batch) < 100:
+                        break
+                    after = (batch[-1]["created"], batch[-1]["id"])
+        return {"counts": {**data["counts"], "needs_you": waiting}, "total": sum(data["counts"].values()),
+                "memories": data["memories"], "projects": data["projects"], "targets": data["targets"]}
+
+    def _dashboard(self, run):
+        """Run a dashboard-only action and return the same envelope as execute()."""
+        try:
+            now = self.clock()
+            return {"ok": True, "data": run(now), "server_time": utc(now), "replayed": False}
+        except (ValidationError, DomainError, ValueError, TypeError) as exc:
+            return self._failure(exc)
+
+    def answer(self, handoff_id, answers, ctx: RequestContext | None = None):
+        """Record the user's replies to open questions. Not an agent tool: people answer in the dashboard, and agents
+        see the answers in stopover_get and stopover_resume. The source record stays unchanged."""
+        ctx = ctx or LOCAL
+
+        def run(now):
+            request = Answers.model_validate({"id": handoff_id, "answers": answers}).model_dump(mode="json")
+            with self.backend.transaction(ctx, write=True) as tx:
+                row = self._row(tx, request["id"])
+                if row["status"] == "completed":
+                    raise DomainError("ALREADY_COMPLETED", "This handoff is already complete", row["revision"])
+                questions = row["record"]["context"]["open_questions"]
+                for item in request["answers"]:
+                    if item["index"] >= len(questions):
+                        raise DomainError("VALIDATION_ERROR", f"Question {item['index']} does not exist; this handoff has {len(questions)}")
+                revision = row["revision"] + 1
+                tx.update_handoff(row["id"], revision=revision, updated=now)
+                tx.add_event(row["id"], "answered", now, revision,
+                             {"answers": request["answers"], **({"actor": ctx.actor} if ctx.actor else {})})
+                data = self._detail(tx, tx.get_handoff(row["id"]), now)
+            # Events for on_event never carry content, so only the question numbers go out.
+            self._emit(ctx, [{"type": "handoff.answered", "handoff_id": row["id"], "revision": revision, "at": utc(now),
+                              "details": {"questions": [item["index"] for item in request["answers"]],
+                                          **({"actor": ctx.actor} if ctx.actor else {})}}])
+            return data
+        return self._dashboard(run)
+
+    def discard(self, handoff_id, ctx: RequestContext | None = None):
+        """Delete from the dashboard. The person owns the workspace, so unlike stopover_delete this also removes a
+        handoff an agent has claimed; that agent can no longer complete it."""
+        ctx = ctx or LOCAL
+        return self._dashboard(lambda now: self.delete(Delete.model_validate({"id": handoff_id}).model_dump(mode="json"),
+                                                       ctx, now, force=True)[0])
 
     def events(self, handoff_id, before=None, ctx: RequestContext | None = None):
         with self.backend.transaction(ctx or LOCAL) as tx:

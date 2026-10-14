@@ -91,9 +91,34 @@ def summary(row, now):
                       "active": state == "claimed"}}
 
 
+PREVIEW_LENGTH = 240
+
+
 def preview(context):
-    """The line under a handoff's title in lists: its summary, or the objective for handoffs saved without one."""
-    return (context.get("summary") or context["objective"])[:300]
+    """The text under a handoff's title in lists: the start of its summary, or of the objective for handoffs saved
+    without one, cut at a word boundary."""
+    text = " ".join((context.get("summary") or context["objective"]).split())
+    if len(text) <= PREVIEW_LENGTH:
+        return text
+    return text[:PREVIEW_LENGTH].rsplit(" ", 1)[0].rstrip(",;:.") + "…"
+
+
+def latest_answers(questions, events):
+    """The newest dashboard answer to each open question, from a handoff's "answered" events (any order)."""
+    found = {}
+    for event in sorted((e for e in events if e["event"] == "answered"), key=lambda e: e["sequence"]):
+        for item in event["details"].get("answers", []):
+            index = item.get("index")
+            if isinstance(index, int) and 0 <= index < len(questions):
+                found[index] = {"index": index, "question": questions[index], "answer": item["answer"],
+                                "answered_at": utc(event["at"]), "answered_by": event["details"].get("actor")}
+    return [found[i] for i in sorted(found)]
+
+
+def needs_you(row, answers):
+    """Whether an open handoff is waiting on the user: it has open questions without an answer yet."""
+    questions = row["record"]["context"]["open_questions"]
+    return row["status"] != "completed" and len(answers) < len(questions)
 
 
 def detail(row, now):

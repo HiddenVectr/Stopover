@@ -26,13 +26,15 @@
       <nav class="nav" aria-label="Main navigation">
         <p class="nav-label">Handoffs</p>
         <button class="nav-item active" data-status="all"><span>All handoffs</span><span class="count" id="count-all">0</span></button>
-        <button class="nav-item" data-status="available"><span><i class="dot available"></i>Ready to resume</span><span class="count" id="count-available">0</span></button>
-        <button class="nav-item" data-status="claimed"><span><i class="dot claimed"></i>In progress</span><span class="count" id="count-claimed">0</span></button>
-        <button class="nav-item" data-status="completed"><span><i class="dot completed"></i>Completed</span><span class="count" id="count-completed">0</span></button>
+        <button class="nav-item" data-status="needs_you"><span><i class="dot needs_you"></i>Needs you</span><span class="count" id="count-needs_you">0</span></button>
+        <button class="nav-item" data-status="available"><span><i class="dot available"></i>Ready to pick up</span><span class="count" id="count-available">0</span></button>
+        <button class="nav-item" data-status="claimed"><span><i class="dot claimed"></i>Picked up</span><span class="count" id="count-claimed">0</span></button>
+        <button class="nav-item" data-status="completed"><span><i class="dot completed"></i>Done</span><span class="count" id="count-completed">0</span></button>
         <p class="nav-label">You</p>
         <button id="memories-button" class="nav-item"><span>Personal memories</span><span class="count" id="count-memories">0</span></button>
       </nav>
       <div class="sidebar-bottom">
+        <section id="host-usage" class="usage" aria-label="Usage" hidden></section>
         <nav id="host-links" class="host-links" aria-label="Account" hidden></nav>
         <button id="signout-button" class="subtle-button" type="button" hidden>Sign out</button>
         <p class="local-status"><i class="dot available"></i><span data-brand="status">Self-hosted inbox</span></p>
@@ -56,7 +58,7 @@
         <p id="global-error" class="error" role="alert" hidden></p>
         <div class="inbox-layout">
           <section class="list-panel" aria-label="Handoffs">
-            <div class="list-heading"><span id="list-label">Handoffs</span><span>Newest first</span></div>
+            <div class="list-heading"><span id="list-label">Handoffs</span><span>By project, newest first</span></div>
             <div id="handoff-list" class="list" aria-live="polite"></div>
             <button id="load-more" class="button secondary load-more" hidden>Load more handoffs</button>
           </section>
@@ -112,6 +114,7 @@
       <div class="account-identity"><span id="account-avatar" class="workspace-avatar"></span><div><strong id="account-name"></strong><span id="account-detail"></span></div></div>
       <button id="close-account" class="icon-button" aria-label="Close account menu">×</button>
     </div>
+    <section id="account-usage" class="usage" aria-label="Usage" hidden></section>
     <nav id="account-links" class="account-links" aria-label="Account links"></nav>
   </dialog>
   <dialog id="copy-dialog" aria-labelledby="copy-title">
@@ -127,6 +130,16 @@
       <input id="signin-token" class="signin-input" type="password" autocomplete="current-password" required>
       <p id="signin-error" class="error" role="alert" hidden></p>
       <button id="signin-submit" class="button primary" type="submit">Sign in</button>
+    </form>
+  </dialog>
+  <dialog id="delete-dialog" aria-labelledby="delete-title">
+    <form method="dialog">
+      <div class="dialog-heading"><h2 id="delete-title">Delete this handoff?</h2></div>
+      <p id="delete-text" class="muted"></p>
+      <div class="dialog-actions">
+        <button class="button secondary" value="cancel" type="submit">Cancel</button>
+        <button id="delete-confirm" class="button danger" value="delete" type="submit">Delete handoff</button>
+      </div>
     </form>
   </dialog>
   <div id="toast" role="status" class="toast" hidden></div>

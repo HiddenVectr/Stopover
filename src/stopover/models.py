@@ -42,7 +42,7 @@ def _slug(value):
 
 Text = Annotated[str, StringConstraints(min_length=1, max_length=8192)]
 Short = Annotated[str, StringConstraints(min_length=1, max_length=160)]
-Glance = Annotated[str, StringConstraints(max_length=300)]
+Overview = Annotated[str, StringConstraints(max_length=1200)]
 Slug = Annotated[str, BeforeValidator(_slug), StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,80}$")]
 UUID = Annotated[str, BeforeValidator(_uuid), WithJsonSchema({"type": "string", "format": "uuid"})]
 Expiry = Annotated[str, BeforeValidator(_expiry), WithJsonSchema({"type": "string", "description": "UTC date (2026-12-31) or date-time with a timezone"})]
@@ -109,8 +109,9 @@ class Step(Model):
 
 
 class Context(Model):
-    # One or two sentences for choosing what to resume at a glance: the work, where it stopped, the next step.
-    summary: Glance = ""
+    # One or two short paragraphs for a person deciding what to resume: the work and why, what's done and decided,
+    # where it stopped, and the very next step. Lists show its start; the dashboard shows all of it at the top.
+    summary: Overview = ""
     objective: Text
     current_state: Text
     next_steps: list[Step] = Field(min_length=1, max_length=10)
@@ -235,7 +236,8 @@ class Get(Model):
 
 
 class ListQuery(Model):
-    status: Literal["available", "claimed", "completed", "all"] = "available"
+    # needs_you: open handoffs with open questions the user hasn't answered yet.
+    status: Literal["available", "claimed", "completed", "needs_you", "all"] = "available"
     project_key: Slug | None = None
     target_client: Short | None = None
     q: Annotated[str, StringConstraints(max_length=200)] = ""
@@ -288,6 +290,17 @@ class Complete(Model):
 
 class Delete(Model):
     id: UUID
+
+
+class AnswerItem(Model):
+    index: Annotated[int, Field(ge=0, lt=20)]  # position in context.open_questions
+    answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=4096)]
+
+
+class Answers(Model):
+    """The user's replies to a handoff's open questions, written in the dashboard."""
+    id: UUID
+    answers: list[AnswerItem] = Field(min_length=1, max_length=20)
 
 
 def _not_bool(value):

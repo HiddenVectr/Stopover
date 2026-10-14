@@ -1,4 +1,7 @@
-"""HTTP application: MCP endpoint, read-only dashboard API, and the extension points used by hosted builds."""
+"""HTTP application: MCP endpoint, dashboard API, and the extension points used by hosted builds.
+
+The dashboard API reads everything; its only writes are answering a handoff's open questions and deleting a handoff.
+"""
 from __future__ import annotations
 
 import html
@@ -268,7 +271,9 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
     The local deployment calls this with no arguments. A hosted build passes its own service (backend and registry),
     an authenticator that maps requests to a RequestContext, its allowed hosts, and any extra routes or middleware.
     With login_url, unauthenticated dashboard API calls return it so the dashboard can redirect to sign in; a host can
-    also serve GET /api/session ({"user": {...}, "workspace": {...}, "logout_url": ...}) to show the signed-in account.
+    also serve GET /api/session ({"user": {...}, "workspace": {...}, "logout_url": ...}) to show the signed-in account,
+    optionally with "usage": {"title": ..., "url": ..., "items": [{"label": ..., "used": n, "limit": n | None}]} to show
+    plan limits in the sidebar (the dashboard re-reads it every 15 seconds).
     mcp_challenge(request) returns the WWW-Authenticate value for unauthenticated /mcp requests, e.g.
     'Bearer resource_metadata="https://host/.well-known/oauth-protected-resource/mcp"' for MCP OAuth discovery.
     brand replaces the dashboard's product name, page title, status line and placeholder workspace (see Brand).
@@ -335,9 +340,24 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
         result = await call(request, "stopover_memory_read", params)
         return JSONResponse(result, status_code=200 if result["ok"] else 400)
 
+    def status_for(result):
+        return 200 if result["ok"] else 404 if result["error"]["code"] == "NOT_FOUND" else 409 if result["error"]["code"] == "ALREADY_COMPLETED" else 400
+
     async def detail(request):
-        result = await call(request, "stopover_get", {"id": request.path_params["id"]})
-        return JSONResponse(result, status_code=200 if result["ok"] else 404 if result["error"]["code"] == "NOT_FOUND" else 400)
+        if request.method == "DELETE":
+            result = await anyio.to_thread.run_sync(service.discard, request.path_params["id"], request_context(request))
+        else:
+            result = await call(request, "stopover_get", {"id": request.path_params["id"]})
+        return JSONResponse(result, status_code=status_for(result))
+
+    async def answers(request):
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "Send JSON: {\"answers\": [{\"index\": 0, \"answer\": \"...\"}]}"}, status_code=400)
+        result = await anyio.to_thread.run_sync(service.answer, request.path_params["id"],
+                                                body.get("answers") if isinstance(body, dict) else None, request_context(request))
+        return JSONResponse(result, status_code=status_for(result))
 
     async def events(request):
         try:
@@ -354,7 +374,8 @@ def create_app(directory=None, *, service: StopoverService | None = None, auth: 
     routes = [Route("/", page), Route("/handoffs/{id}", page), Route("/memories", page), Route("/memories/{key}", page),
               Route("/healthz", health), Route("/api/overview", overview), Route("/api/memories", memories),
               Route("/api/memories/{key}", memories), Route("/api/handoffs", handoffs),
-              Route("/api/handoffs/{id}", detail), Route("/api/handoffs/{id}/events", events),
+              Route("/api/handoffs/{id}", detail, methods=["GET", "HEAD", "DELETE"]),
+              Route("/api/handoffs/{id}/answers", answers, methods=["POST"]), Route("/api/handoffs/{id}/events", events),
               Route("/mcp", MCPRoute(manager)), *extra_routes, Mount("/assets", app=StaticFiles(directory=STATIC))]
     # The first middleware is outermost: reject unknown hosts, then bound bodies, then authenticate.
     stack = [Middleware(HostAllowlist, allowed_hosts=allowed_hosts), Middleware(RequestBoundary),

@@ -9,9 +9,9 @@ The server exposes eleven tools over Streamable HTTP at `/mcp`; the stdio bridge
 | Tool | Behavior |
 | --- | --- |
 | `stopover_save` | Validate and save immutable source context. Return an ID and receipt. |
-| `stopover_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records. |
-| `stopover_get` | Return every record field and the current lifecycle state, without changing anything. |
-| `stopover_resume` | Claim a handoff and return its full record plus the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
+| `stopover_list` | Filter and paginate summaries; defaults to available handoffs. Use `status="all"` for all records, or `status="needs_you"` for open handoffs with questions the user hasn't answered. Each item reports `questions` (`open`, `answered`) and `needs_you`. |
+| `stopover_get` | Return every record field, the user's `answers` to its open questions, and the current lifecycle state, without changing anything. |
+| `stopover_resume` | Claim a handoff and return its full record, the user's `answers`, and the claim token, in one call. Fails with `ALREADY_CLAIMED` or `ALREADY_COMPLETED`. |
 | `stopover_claim` | Acquire, renew or release a lease. Acquire returns a claim token; renew and release need only the ID and token. |
 | `stopover_complete` | Record success, blocked work or abandonment, using the claim token. |
 | `stopover_delete` | Permanently delete a handoff and its history (refused while another agent holds an active claim). Agents are told to use it only on explicit request. |
@@ -22,9 +22,22 @@ The tools' MCP annotations follow the same rule. Only the read tools, `stopover_
 
 Claims default to 1 hour (60–86,400 seconds allowed). An expired claim shows as available, but its holder can still renew, release or complete it until another agent acquires the handoff; the new claim's token fences out the old one. Renewal is therefore only needed to stop someone else taking over during long work. `expected_revision` and `claim_generation` are optional extra checks. A claim coordinates ownership; it does not make external file edits exactly once.
 
-The minimum record requires `title`, `source.client`, and `context` with `objective`, `current_state`, at least one `next_steps` entry (`id`, `action`, `done_when`), and at least one `acceptance_criteria` string. Optional fields have stable defaults; `context.summary` (up to 300 characters: the work, where it stopped, the next step) is shown in lists and at the top of the dashboard, falling back to the objective. [examples/push.json](../examples/push.json) is a complete importable save request. The MCP schemas expose all fields and limits.
+The minimum record requires `title`, `source.client`, and `context` with `objective`, `current_state`, at least one `next_steps` entry (`id`, `action`, `done_when`), and at least one `acceptance_criteria` string. Optional fields have stable defaults; `context.summary` (up to 1,200 characters: one or two short paragraphs on the work and why, what's done and decided, where it stopped, and the next step) is shown at the top of the dashboard, and its start in lists, falling back to the objective. Set `project_key` to group related handoffs. [examples/push.json](../examples/push.json) is a complete importable save request. The MCP schemas expose all fields and limits.
 
 For `outcome="succeeded"`, completion must report one passing result with nonempty evidence for each original acceptance criterion. Identify each criterion by `index` (0-based, in the record's order) or by its text; text matching ignores case and whitespace. A mismatch error lists the original criteria with their indexes. Use `blocked` or `abandoned` for an unfinished attempt, or release the claim to leave it available. Corrections/continuations use a new save with `parent_id`; source records are never silently rewritten.
+
+### Answers to open questions
+
+People answer a handoff's `context.open_questions` in the dashboard. `stopover_get` and `stopover_resume` return them as `answers`: the newest answer to each question, as `{index, question, answer, answered_at, answered_by}` in question order. Answers are stored in the handoff's history (an `answered` event that raises its revision), never in the record, so `record` and `record_sha256` stay unchanged. A completed handoff can't be answered.
+
+### Dashboard API
+
+The dashboard uses a small HTTP API on the same server. It reads everything; its only writes are:
+
+- `POST /api/handoffs/{id}/answers` with `{"answers": [{"index": 0, "answer": "..."}]}` (1–20 answers, up to 4,096 characters each). Returns the handoff as `stopover_get` would.
+- `DELETE /api/handoffs/{id}`: permanently deletes the handoff with its answers and history. Unlike `stopover_delete`, it also deletes a handoff an agent has claimed, because the person owns the workspace; that agent can then no longer complete it.
+
+Browsers can only call these from the dashboard's own origin: the server refuses cross-site requests.
 
 ## Personal-memory tools
 

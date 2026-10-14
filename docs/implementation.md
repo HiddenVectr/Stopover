@@ -6,7 +6,7 @@ The service uses the official Python MCP SDK's stateless Streamable HTTP transpo
 
 Natural-language save guidance is included in both the server initialization instructions and the `stopover_save` tool description, so the save workflow is described even when a harness exposes tool descriptions without the server-level instructions. A short save request is enough: the agent builds a contextual summary, leaves the recipient unspecified by default, and returns the saved ID only after success. The MCP receives the summary the agent submits; it cannot read the conversation itself. Model compliance and summary quality still depend on the harness and available context.
 
-SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts. Only a SHA-256 hash of each claim token is stored, and the token alone authorizes renew/release/complete; an expired lease keeps working until another agent acquires the handoff. Mutation timestamps never move backward, even if the system clock does. Receipts expire after 7 days. The read-only web API uses these same store methods, with a separate paginated event history.
+SQLite mutations and their idempotency receipts commit in one transaction. A process lock prevents a second owner; a thread lock serializes database access. Leases persist across service restarts. Only a SHA-256 hash of each claim token is stored, and the token alone authorizes renew/release/complete; an expired lease keeps working until another agent acquires the handoff. Mutation timestamps never move backward, even if the system clock does. Receipts expire after 7 days. The web API uses these same store methods, with a separate paginated event history. Its only writes are deleting a handoff and answering its open questions; answers are stored as `answered` events, so the saved record and its hash never change, and `stopover_get`/`stopover_resume` return the newest answer per question as `answers`.
 
 The dashboard is bundled static HTML/CSS/JavaScript with no CDN, frontend build service or remote assets. All source content is inserted as text, not rendered HTML or Markdown. The dashboard opens directly without a login or session cookie. The middleware retains cross-site browser request rejection and a 64 KiB body limit. Unexpected Host headers are rejected; this is an additional request boundary, not authentication. No wildcard CORS is enabled, and Compose still publishes on IPv4 loopback only.
 
@@ -28,7 +28,7 @@ Source records are immutable. A completed record remains visible and browsable. 
 | `sqlite_backend.py` | The SQLite store: single owner, all SQL and migrations. |
 | `service.py`, `memory.py` | Validation, idempotent receipts, monotonic time, retention, and every tool handler. |
 | `registry.py`, `catalog.py` | The tools, prompts and instructions the MCP server exposes. |
-| `server.py` | The HTTP app: the MCP endpoint, the read-only dashboard API, the dashboard page, and the request checks (Host allowlist, Origin, Fetch Metadata, body limit). |
+| `server.py` | The HTTP app: the MCP endpoint, the dashboard API (reads, plus answering questions and deleting), the dashboard page, and the request checks (Host allowlist, Origin, Fetch Metadata, body limit). |
 | `bridge.py` | The stdio bridge, which forwards to the running server. |
 | `models.py` | The input models, from which the committed JSON schemas are generated. |
 

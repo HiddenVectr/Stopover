@@ -1,7 +1,7 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const labels = { all: 'All handoffs', available: 'Ready to resume', claimed: 'In progress', completed: 'Completed' };
+const labels = { all: 'All handoffs', needs_you: 'Needs you', available: 'Ready to pick up', claimed: 'Picked up', completed: 'Done' };
 const state = { status: 'all', selected: location.pathname.startsWith('/handoffs/') ? location.pathname.split('/')[2] : null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
 let toastTimer, searchTimer;
 let session = null;  // Set when the host serves /api/session.
@@ -121,7 +121,7 @@ async function overview() {
   $('memory-total').textContent = data.memories;
   $('count-all').textContent = data.total;
   $('summary-total').textContent = data.total;
-  for (const name of ['available', 'claimed', 'completed']) $('count-' + name).textContent = data.counts[name];
+  for (const name of ['needs_you', 'available', 'claimed', 'completed']) $('count-' + name).textContent = data.counts[name] ?? 0;
   options('project-filter', data.projects, 'All projects');
   options('target-filter', data.targets, 'Any recipient');
 }
@@ -150,51 +150,94 @@ function renderList() {
   keepPlace(container, () => renderRows(container));
 }
 
-// "At a glance": what to know before choosing this handoff. The saving agent's summary when it wrote one; otherwise
-// (older handoffs) where things stand and the first next step.
-function glance(content, context, data) {
+// The summary at the top of a handoff: the saving agent's paragraph or two. Short or missing summaries (older
+// handoffs) are filled out with where things stand and the first next step.
+function glance(parent, context, data) {
   const box = el('section', 'glance');
-  box.setAttribute('aria-label', 'At a glance');
-  box.append(el('span', 'glance-label', 'At a glance'));
-  box.append(el('p', 'glance-summary', context.summary || context.current_state));
+  box.setAttribute('aria-label', 'Summary');
+  box.append(el('span', 'glance-label', 'Summary'));
+  const paragraphs = (context.summary || '').split(/\n\s*\n/).map((text) => text.trim()).filter(Boolean);
+  if (!paragraphs.length) paragraphs.push(context.objective.trim());
+  const brief = paragraphs.length < 2 && paragraphs[0].length < 320;
+  const where = context.current_state.trim();
+  if (brief && where && !paragraphs.includes(where)) paragraphs.push(where);
+  for (const text of paragraphs) box.append(el('p', 'glance-summary', text));
   const first = context.next_steps[0];
-  if (!context.summary && !data.completion && first) {
+  if (brief && !data.completion && first) {
     const next = el('p', 'glance-next');
     next.append(el('strong', '', 'Next: '), document.createTextNode(first.action));
     box.append(next);
   }
   const facts = [`${context.next_steps.length} next step${context.next_steps.length === 1 ? '' : 's'}`];
-  if (context.open_questions.length) facts.push(`${context.open_questions.length} open question${context.open_questions.length === 1 ? '' : 's'}`);
-  if (data.completion) facts.unshift(`Completed: ${data.completion.outcome}`);
+  const questions = context.open_questions.length;
+  if (questions) {
+    const waiting = data.completion ? 0 : questions - (data.answers || []).length;
+    facts.push(waiting ? `${waiting} of ${questions} question${questions === 1 ? '' : 's'} waiting for you` : `${questions} question${questions === 1 ? '' : 's'}${data.completion ? '' : ', all answered'}`);
+  }
+  if (data.completion) facts.unshift(`Done: ${data.completion.outcome}`);
   box.append(el('p', 'glance-facts', facts.join(' · ')));
-  content.append(box);
+  parent.append(box);
+}
+
+// Handoffs grouped by project, in order of each project's newest handoff; those without a project come last.
+function byProject(items) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = item.project_key || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const keys = [...groups.keys()].filter(Boolean);
+  if (groups.has('')) keys.push('');
+  return keys.map((key) => [key, groups.get(key)]);
 }
 
 function renderRows(container) {
   container.replaceChildren();
   if (!state.items.length) {
     const empty = el('div', 'empty-list');
-    if (filtered()) empty.append(el('strong', '', 'No matching handoffs.'), el('p', '', 'Nothing matches this search or filter.'), button('Clear filters', 'button secondary', clearFilters));
+    const narrowed = ['search', 'project-filter', 'target-filter'].some((id) => $(id).value.trim());
+    if (state.status === 'needs_you' && !narrowed) empty.append(el('strong', '', 'Nothing needs you right now.'), el('p', '', 'When an agent saves a handoff with open questions, it appears here so you can answer before the next agent picks it up.'));
+    else if (filtered()) empty.append(el('strong', '', 'No matching handoffs.'), el('p', '', 'Nothing matches this search or filter.'), button('Clear filters', 'button secondary', clearFilters));
     else empty.append(el('strong', '', 'No handoffs here yet.'), el('p', '', 'Ask your AI agent to save a handoff. Its context will appear here, ready for the next session.'), button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
     container.append(empty);
   }
-  for (const item of state.items) {
-    const row = button('', 'handoff-row' + (item.id === state.selected ? ' selected' : ''), () => choose(item.id, true, true));
-    row.dataset.key = item.id;
-    row.setAttribute('aria-pressed', String(item.id === state.selected));
-    const top = el('div', 'row-top');
-    const when = el('time', '', relative(item.created_at));
-    when.dateTime = item.created_at;
-    when.title = date(item.created_at);
-    top.append(el('span', 'row-title', item.title), when);
-    const bottom = el('div', 'row-bottom');
-    bottom.append(badge(item.effective_status));
-    if (item.project_key) bottom.append(el('span', 'project-tag', item.project_key));
-    bottom.append(el('span', 'agent-route', `${item.source_client} → ${item.target_client || 'any agent'}`));
-    row.append(top, el('div', 'row-preview', item.preview), bottom);
-    container.append(row);
+  const groups = byProject(state.items);
+  // Headings only help when there's more than one group and no project filter already narrows the list.
+  const headings = !$('project-filter').value && !(groups.length === 1 && groups[0][0] === '');
+  for (const [project, items] of groups) {
+    if (headings) {
+      const heading = project ? button('', 'group-heading', () => { $('project-filter').value = project; loadList(); }) : el('div', 'group-heading no-project');
+      if (project) heading.title = `Show only ${project}`;
+      heading.append(el('span', '', project || 'No project'), el('span', 'count', items.length));
+      container.append(heading);
+    }
+    for (const item of items) container.append(handoffRow(item, !headings));
   }
   $('load-more').hidden = !state.cursor;
+}
+
+function handoffRow(item, showProject) {
+  const row = button('', 'handoff-row' + (item.id === state.selected ? ' selected' : ''), () => choose(item.id, true, true));
+  row.dataset.key = item.id;
+  row.setAttribute('aria-pressed', String(item.id === state.selected));
+  const top = el('div', 'row-top');
+  const when = el('time', '', relative(item.created_at));
+  when.dateTime = item.created_at;
+  when.title = date(item.created_at);
+  top.append(el('span', 'row-title', item.title), when);
+  const bottom = el('div', 'row-bottom');
+  bottom.append(badge(item.effective_status));
+  if (item.needs_you) {
+    const waiting = item.questions.open - item.questions.answered;
+    bottom.append(el('span', 'badge needs_you', `${waiting} question${waiting === 1 ? '' : 's'} for you`));
+  }
+  if (showProject && item.project_key) bottom.append(el('span', 'project-tag', item.project_key));
+  bottom.append(el('span', 'agent-route', item.claim.active ? `with ${item.claim.holder_label}` : `${item.source_client} → ${item.target_client || 'any agent'}`));
+  // A lapsed claim isn't proof the agent stopped, but anyone can pick the handoff up now.
+  if (item.status === 'claimed' && !item.claim.active) bottom.append(el('span', 'row-note', `${item.claim.holder_label}'s claim expired`));
+  row.append(top, el('div', 'row-preview', item.preview), bottom);
+  return row;
 }
 
 async function loadList(append = false) {
@@ -272,17 +315,22 @@ function renderDetail(data) {
   route.append(el('strong', '', record.source.client), el('span', '', ' → '), el('strong', '', record.target_client || 'any agent'));
   if (record.project_key) route.append(el('span', 'project-tag', record.project_key));
   const actions = el('div', 'detail-actions');
-  actions.append(button('Copy resume prompt', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))));
+  actions.append(button('Copy resume prompt', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))),
+                 button('Delete', 'button danger', () => confirmDelete(data)));
   const id = el('div', 'id-row');
   id.append(el('code', '', data.id), button('Copy ID', 'copy-small', () => copy(data.id)));
   const title = el('h2', '', record.title);
   title.tabIndex = -1;
-  header.append(status, title, route, actions, id);
+  header.append(status, title, route);
+  glance(header, context, data);
+  header.append(actions, id);
   if (data.claim.holder_label && data.claim.active) {
-    header.append(el('p', 'claim-note', `In progress with ${data.claim.holder_label} until ${date(data.claim.expires_at)}.`));
+    header.append(el('p', 'claim-note', `Picked up by ${data.claim.holder_label}; its claim lasts until ${date(data.claim.expires_at)}.`));
+  } else if (data.status === 'claimed') {
+    header.append(el('p', 'claim-note', `${data.claim.holder_label}'s claim expired ${date(data.claim.expires_at)}. Any agent can pick this up now.`));
   }
   const content = el('div', 'detail-content');
-  glance(content, context, data);
+  questions(content, data);
   if (data.completion) {
     const complete = section(content, 'Outcome');
     const card = el('div', 'detail-card outcome-card');
@@ -303,7 +351,6 @@ function renderDetail(data) {
   textSection(content, 'Background', context.background);
   listSection(content, 'Constraints', context.constraints);
   cards(content, 'Facts & assumptions', context.facts, (card, item) => { card.append(el('span', 'card-label', item.basis), el('p', '', item.text)); evidence(card, item); });
-  listSection(content, 'Open questions', context.open_questions);
   listSection(content, 'Source resume suggestions', context.resume_instructions);
   const renderReference = (card, item) => {
     card.append(el('span', 'card-label', `${item.id} · ${item.kind} · ${item.availability.replaceAll('_', ' ')}`), el('strong', '', item.purpose), el('p', 'mono', item.locator));
@@ -340,6 +387,85 @@ function renderDetail(data) {
   loadEvents(data.id, activity).catch((exception) => { activity.append(el('p', 'error', exception.message)); });
 }
 
+// Unsent answers survive refreshes and re-renders: "<handoff id>:<question index>" → text.
+const drafts = new Map();
+
+// Open questions the saving agent left, with the user's answers. Answers go to the next agent that reads the handoff.
+function questions(parent, data) {
+  const asked = data.record.context.open_questions;
+  if (!asked.length) return;
+  const answers = new Map((data.answers || []).map((item) => [item.index, item]));
+  const open = !data.completion;
+  const waiting = asked.length - answers.size;
+  const node = section(parent, open && waiting ? `Questions for you · ${waiting} waiting` : 'Open questions');
+  if (open) node.append(el('p', 'small muted', data.claim.active
+    ? `${data.claim.holder_label} has picked this up. It sees your answers the next time it reads the handoff.`
+    : 'Your answers go to the next agent that resumes this handoff.'));
+  asked.forEach((question, index) => {
+    const card = el('div', 'question-card');
+    card.append(el('strong', '', question));
+    const answer = answers.get(index);
+    const key = `${data.id}:${index}`;
+    if (open && (!answer || drafts.has(key))) {
+      card.classList.add('waiting');
+      const box = el('textarea');
+      box.value = drafts.get(key) ?? '';
+      box.maxLength = 4096;
+      box.placeholder = 'Your answer';
+      box.setAttribute('aria-label', 'Your answer to: ' + question);
+      box.addEventListener('input', () => drafts.set(key, box.value));
+      const row = el('div', 'question-actions');
+      const save = button('Save answer', 'button primary', () => submitAnswer(data.id, index, box, save));
+      row.append(save);
+      if (answer) row.append(button('Cancel', 'button secondary', () => { drafts.delete(key); renderDetail(state.detail); }));
+      card.append(box, row);
+    } else if (answer) {
+      card.append(el('p', 'answer', answer.answer));
+      const row = el('div', 'question-actions');
+      row.append(el('span', '', 'Answered ' + since(answer.answered_at)));
+      if (open) row.append(button('Edit answer', 'button secondary', () => { drafts.set(key, answer.answer); renderDetail(state.detail); }));
+      card.append(row);
+    } else card.append(el('p', 'small muted', 'Not answered.'));
+    node.append(card);
+  });
+}
+
+async function submitAnswer(id, index, box, control) {
+  const text = box.value.trim();
+  if (!text) { box.focus(); showToast('Write an answer first.'); return; }
+  control.disabled = true;
+  try {
+    const response = await api(`/api/handoffs/${encodeURIComponent(id)}/answers`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answers: [{ index, answer: text }] }) });
+    drafts.delete(`${id}:${index}`);
+    if (state.selected === id) { state.detail = response.data; renderDetail(response.data); }
+    showToast('Answer saved');
+    overview().then(() => loadList()).catch((exception) => error(exception.message));
+  } catch (exception) { showToast(exception.message); control.disabled = false; }
+}
+
+function confirmDelete(data) {
+  const dialog = $('delete-dialog');
+  $('delete-text').textContent = (data.claim.active ? `${data.claim.holder_label} has picked this up; after deleting, it can’t record its result. ` : '')
+    + 'This permanently removes the handoff, your answers and its history. It can’t be undone.';
+  dialog.dataset.id = data.id;
+  dialog.returnValue = '';
+  dialog.showModal();
+}
+
+$('delete-dialog').addEventListener('close', async () => {
+  const dialog = $('delete-dialog');
+  if (dialog.returnValue !== 'delete') return;
+  const id = dialog.dataset.id;
+  try {
+    await api('/api/handoffs/' + encodeURIComponent(id), { method: 'DELETE' });
+    for (const key of drafts.keys()) if (key.startsWith(id + ':')) drafts.delete(key);
+    showToast('Handoff deleted');
+    if (state.selected === id) closeDetail();
+    await refresh();
+  } catch (exception) { showToast(exception.message); }
+});
+
 async function loadEvents(id, target, before = null) {
   const response = await api(`/api/handoffs/${encodeURIComponent(id)}/events${before ? '?before=' + before : ''}`);
   if (state.selected !== id || !target.isConnected) return;
@@ -348,8 +474,12 @@ async function loadEvents(id, target, before = null) {
   const list = target.querySelector('ul');
   for (const item of response.items) {
     const li = el('li');
-    li.append(el('strong', '', `${item.event === 'pushed' ? 'Handoff saved' : item.event.charAt(0).toUpperCase() + item.event.slice(1)} · revision ${item.revision}`), el('time', '', date(item.at)));
-    for (const [key, value] of Object.entries(item.details)) if (value != null) li.append(el('div', 'small', key.replaceAll('_', ' ') + ': ' + value));
+    const name = { pushed: 'Handoff saved', answered: 'You answered', acquire: 'Picked up', release: 'Released', renew: 'Claim renewed' }[item.event] || sentence(item.event);
+    li.append(el('strong', '', `${name} · revision ${item.revision}`), el('time', '', date(item.at)));
+    for (const [key, value] of Object.entries(item.details)) {
+      if (key === 'answers' && Array.isArray(value)) value.forEach((answer) => li.append(el('div', 'small', `Question ${answer.index + 1}: ${answer.answer}`)));
+      else if (value != null) li.append(el('div', 'small', key.replaceAll('_', ' ') + ': ' + value));
+    }
     list.append(li);
   }
   if (response.next_cursor) target.append(button('Earlier activity', 'button secondary load-events', () => loadEvents(id, target, response.next_cursor).catch((exception) => showToast(exception.message))));
@@ -502,6 +632,34 @@ $('signout-button').addEventListener('click', async () => {
   storeToken(''); requireSignIn();
 });
 
+// A host can report plan usage in /api/session as usage: {title, url?, items: [{label, used, limit (null: none)}]}.
+function renderUsage(box, usage) {
+  const items = Array.isArray(usage?.items) ? usage.items.filter((item) => item && typeof item.label === 'string' && Number.isFinite(item.used)) : [];
+  box.hidden = !items.length;
+  if (!items.length) return box.replaceChildren();
+  const title = el('p', 'usage-title');
+  title.append(el('span', '', typeof usage.title === 'string' ? usage.title : 'Usage'));
+  if (sameOriginPath(usage.url)) { const details = el('a', '', 'Details'); details.href = usage.url; title.append(details); }
+  box.replaceChildren(title);
+  for (const item of items) {
+    const row = el('div', 'usage-item');
+    const limited = Number.isFinite(item.limit);
+    const left = limited ? Math.max(0, item.limit - item.used) : null;
+    const head = el('div', 'usage-head' + (limited && !left ? ' out' : ''));
+    head.append(el('span', '', item.label), el('strong', '', limited ? `${left.toLocaleString()} of ${item.limit.toLocaleString()} left` : 'No limit'));
+    row.append(head);
+    if (limited) {
+      const bar = el('div', 'usage-bar');
+      const share = item.used / Math.max(item.limit, 1);
+      const fill = el('div', 'usage-fill' + (share >= 1 ? ' out' : share >= 0.8 ? ' low' : ''));
+      fill.style.width = `${Math.min(100, 100 * share)}%`;
+      bar.append(fill);
+      row.append(bar);
+    }
+    box.append(row);
+  }
+}
+
 // Hosts that add accounts can describe the signed-in user at /api/session; plain Stopover answers 404.
 async function loadSession() {
   try {
@@ -516,6 +674,7 @@ async function loadSession() {
     const links = (Array.isArray(session.links) ? session.links : []).filter((link) => link && typeof link.label === 'string' && sameOriginPath(link.url));
     $('host-links').replaceChildren(...links.map((link) => { const a = el('a', '', link.label); a.href = link.url; return a; }));
     $('host-links').hidden = !links.length;
+    renderUsage($('host-usage'), session.usage);
     updateAuthUI();
   } catch { /* optional */ }
 }
@@ -531,6 +690,7 @@ function openAccount() {
   const items = [...links];
   if (!$('signout-button').hidden) items.push(button('Sign out', 'account-link signout', () => { $('account-dialog').close(); $('signout-button').click(); }));
   $('account-links').replaceChildren(...items);
+  renderUsage($('account-usage'), session?.usage);
   $('account-dialog').showModal();
 }
 $('account-button').addEventListener('click', openAccount);
@@ -799,7 +959,7 @@ $('memory-search').addEventListener('input', () => { clearTimeout(memorySearchTi
 $('memory-category').addEventListener('change', () => loadMemories());
 addEventListener('popstate', route);
 setInterval(async () => {
-  if (document.hidden || $('setup-dialog').open || $('signin-dialog').open) return;
+  if (document.hidden || $('setup-dialog').open || $('signin-dialog').open || $('delete-dialog').open) return;
   if (memories.active) {
     try {
       await overview();
@@ -808,6 +968,7 @@ setInterval(async () => {
     } catch (exception) { memoryError(exception.message); }
     return;
   }
+  if (session) loadSession();  // keeps the host's usage figures current
   try { await overview(); if (state.pages === 1 && !$('search').matches(':focus')) await loadList(); if (state.selected) await detail(state.selected, true); }
   catch (exception) { error(exception.message); }
 }, 15000);
