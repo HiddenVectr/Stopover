@@ -6,6 +6,15 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+## 0.17.0 — 2026-10-13
+
+- Dashboard: an inbox for your agents' work. The sidebar sorts handoffs into **Needs you** (open handoffs with questions you haven't answered), **Ready to pick up**, **Picked up** and **Done**. Lists group handoffs by project, newest first, with those that have no project last; select a project heading to show only that project. Rows show who has a handoff picked up, and note when a claim expired.
+- Answer an agent's open questions in the dashboard. The next agent to read or resume the handoff gets your answers in a new `answers` field of `stopover_get` and `stopover_resume`, even after the original session has ended. Answers are stored in the handoff's history; the saved record and its hash never change. `stopover_list` takes `status="needs_you"`, and its items report `questions` and `needs_you`.
+- Delete a handoff from the dashboard. It asks first, and warns you when an agent has it picked up (the dashboard can delete those; `stopover_delete` still can't).
+- Handoff summaries can be a paragraph or two (`context.summary` now takes up to 1,200 characters, up from 300), and the dashboard shows the whole summary at the top of a handoff. Agents are asked to write one or two short paragraphs, and to set `project_key` whenever they know the project. Lists show the start of the summary, cut at a word. Handoffs with a short or missing summary also show where things stand and the first next step.
+- Hosts can show plan usage in the dashboard sidebar (and the account sheet on phones): add `usage` to `/api/session` with a title, an optional details link, and items of `label`, `used` and `limit` (`null` for no limit). Each item shows how much is left, with a bar that turns amber at 80% and red when used up.
+- The dashboard API, until now read-only, adds `POST /api/handoffs/{id}/answers` and `DELETE /api/handoffs/{id}` (see the API reference). A custom `Backend` needs no changes.
+
 ## 0.16.0 — 2026-10-13
 
 - `STOPOVER_INACTIVE_DAYS`: delete handoffs of any status that nobody has changed for that many days (a handoff with an unexpired claim is kept). Useful because agents don't always mark work complete.
