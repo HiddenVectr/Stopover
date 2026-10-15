@@ -6,6 +6,11 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+## 0.18.0 — 2026-10-14
+
+- Dashboard: a calmer inbox built around the main flow. It opens on **Inbox**, with **Needs you**, **Ready to continue** and **With an agent** sections; finished work moves to **Done**. Rows show a badge only when it adds something (questions waiting, which agent has it), a two-line preview and one line of details. Projects are small labels within each section; select one to filter. The project and recipient dropdowns, the Refresh button and the workspace count are gone, and search is a compact field. With nothing selected, the right-hand side shows **Next up**.
+- Handoff page: the status, who saved it, the summary and a **Continue in another agent** box come first; unanswered questions come before continuing. Next steps follow, and the rest of the record is folded under **Details** and **Record & history**. Copy full record, Copy ID and Delete moved into a **⋯** menu. Agent names are shown as people know them (Claude Code, Codex, Cursor).
+
 ## 0.17.0 — 2026-10-13
 
 - Dashboard: an inbox for your agents' work. The sidebar sorts handoffs into **Needs you** (open handoffs with questions you haven't answered), **Ready to pick up**, **Picked up** and **Done**. Lists group handoffs by project, newest first, with those that have no project last; select a project heading to show only that project. Rows show who has a handoff picked up, and note when a claim expired.
