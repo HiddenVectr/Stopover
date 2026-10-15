@@ -25,11 +25,8 @@
       </div>
       <nav class="nav" aria-label="Main navigation">
         <p class="nav-label">Handoffs</p>
-        <button class="nav-item active" data-status="all"><span>All handoffs</span><span class="count" id="count-all">0</span></button>
-        <button class="nav-item" data-status="needs_you"><span><i class="dot needs_you"></i>Needs you</span><span class="count" id="count-needs_you">0</span></button>
-        <button class="nav-item" data-status="available"><span><i class="dot available"></i>Ready to pick up</span><span class="count" id="count-available">0</span></button>
-        <button class="nav-item" data-status="claimed"><span><i class="dot claimed"></i>Picked up</span><span class="count" id="count-claimed">0</span></button>
-        <button class="nav-item" data-status="completed"><span><i class="dot completed"></i>Done</span><span class="count" id="count-completed">0</span></button>
+        <button class="nav-item active" data-status="inbox"><span>Inbox</span><span class="counts"><span class="count alert" id="count-needs_you" title="Waiting for your answer" hidden>0</span><span class="count" id="count-open">0</span></span></button>
+        <button class="nav-item" data-status="done"><span>Done</span><span class="count" id="count-completed">0</span></button>
         <p class="nav-label">You</p>
         <button id="memories-button" class="nav-item"><span>Personal memories</span><span class="count" id="count-memories">0</span></button>
       </nav>
@@ -43,22 +40,19 @@
 
     <main class="main">
       <div id="handoff-view" class="view">
-        <header class="page-header">
+        <header class="page-header handoff-header">
           <div class="title-block">
-            <h1 id="page-title">All handoffs</h1>
-            <p class="summary"><span><strong id="summary-total">0</strong> in your workspace</span><span id="sync-state" role="status">Connecting…</span></p>
+            <h1 id="page-title">Inbox</h1>
+            <p class="summary"><span id="sync-state" role="status">Connecting…</span></p>
           </div>
-          <button id="refresh-button" class="button secondary icon-text" type="button"><span aria-hidden="true">↻</span><span class="label">Refresh</span></button>
+          <div class="toolbar">
+            <button id="project-chip" class="filter-chip" type="button" hidden></button>
+            <label class="search-field compact"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search" aria-label="Search handoffs"></label>
+          </div>
         </header>
-        <div class="filters">
-          <label class="search-field"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search title, project or ID" aria-label="Search handoffs"></label>
-          <select id="project-filter" aria-label="Filter by project"><option value="">All projects</option></select>
-          <select id="target-filter" aria-label="Filter by receiving agent"><option value="">Any recipient</option></select>
-        </div>
         <p id="global-error" class="error" role="alert" hidden></p>
         <div class="inbox-layout">
           <section class="list-panel" aria-label="Handoffs">
-            <div class="list-heading"><span id="list-label">Handoffs</span><span>By project, newest first</span></div>
             <div id="handoff-list" class="list" aria-live="polite"></div>
             <button id="load-more" class="button secondary load-more" hidden>Load more handoffs</button>
           </section>

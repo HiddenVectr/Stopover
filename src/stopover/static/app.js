@@ -1,8 +1,8 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
-const labels = { all: 'All handoffs', needs_you: 'Needs you', available: 'Ready to pick up', claimed: 'Picked up', completed: 'Done' };
-const state = { status: 'all', selected: location.pathname.startsWith('/handoffs/') ? location.pathname.split('/')[2] : null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
+const labels = { inbox: 'Inbox', done: 'Done', search: 'Search' };
+const state = { view: 'inbox', project: '', sections: { needs: [], ready: [], busy: [] }, total: 0, folds: new Set(), selected: location.pathname.startsWith('/handoffs/') ? location.pathname.split('/')[2] : null, detail: null, cursor: null, items: [], generation: 0, pages: 1 };
 let toastTimer, searchTimer;
 let session = null;  // Set when the host serves /api/session.
 // The product name the server put in the page (a host can rebrand it with create_app(brand=...)).
@@ -28,7 +28,12 @@ function relative(value) {
   const minutes = Math.max(0, Math.floor((Date.now() - new Date(value)) / 60000));
   return minutes < 1 ? 'Just now' : minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : new Date(value).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
-function badge(status) { return el('span', `badge ${status}`, labels[status] || status); }
+function badge(kind, text) { return el('span', `badge ${kind}`, text); }
+// Agents report their own names ("claude-code", "Codex"); show the familiar ones nicely and the rest as given.
+const AGENTS = { 'claude-code': 'Claude Code', claudecode: 'Claude Code', codex: 'Codex', cursor: 'Cursor', omp: 'OMP', hermes: 'Hermes', 'muse-code': 'Muse Code' };
+function agentName(value) { return value ? AGENTS[String(value).toLowerCase().replace(/[\s_]+/g, '-')] || value : 'an agent'; }
+function waitingQuestions(item) { return item.questions ? item.questions.open - item.questions.answered : 0; }
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const narrow = () => matchMedia('(max-width: 900px)').matches;
 const sentence = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 // "Saved 5m ago", "Saved just now", "Saved Oct 3".
@@ -109,30 +114,33 @@ function error(message = '') {
   if (message) $('sync-state').textContent = 'Could not refresh';
 }
 
-function options(id, values, first) {
-  const selected = $(id).value;
-  $(id).replaceChildren(new Option(first, ''), ...values.map((value) => new Option(value, value)));
-  if (values.includes(selected)) $(id).value = selected;
-}
-
 async function overview() {
   const data = await api('/api/overview');
   $('count-memories').textContent = data.memories;
   $('memory-total').textContent = data.memories;
-  $('count-all').textContent = data.total;
-  $('summary-total').textContent = data.total;
-  for (const name of ['needs_you', 'available', 'claimed', 'completed']) $('count-' + name).textContent = data.counts[name] ?? 0;
-  options('project-filter', data.projects, 'All projects');
-  options('target-filter', data.targets, 'Any recipient');
+  state.total = data.total;
+  $('count-open').textContent = data.counts.available + data.counts.claimed;
+  $('count-completed').textContent = data.counts.completed;
+  const waiting = data.counts.needs_you ?? 0;
+  $('count-needs_you').textContent = waiting;
+  $('count-needs_you').hidden = !waiting;
 }
 
-function filtered() {
-  return state.status !== 'all' || ['search', 'project-filter', 'target-filter'].some((id) => $(id).value.trim());
+const searching = () => Boolean($('search').value.trim());
+// What the list shows: the inbox (open work in sections), done work, or search results across everything.
+const mode = () => searching() ? 'search' : state.view;
+
+function setProject(project) {
+  state.project = project;
+  $('project-chip').hidden = !project;
+  $('project-chip').textContent = project ? `${project} ×` : '';
+  $('project-chip').setAttribute('aria-label', project ? `Showing ${project} only. Show all projects` : '');
+  loadList();
 }
 
 function clearFilters() {
-  for (const id of ['search', 'project-filter', 'target-filter']) $(id).value = '';
-  document.querySelector('[data-status="all"]').click();
+  $('search').value = '';
+  setProject('');
 }
 
 // Rebuilding a list (selection, or the 15-second refresh) must not lose keyboard focus or the list's scroll position.
@@ -147,15 +155,14 @@ function keepPlace(container, render) {
 
 function renderList() {
   const container = $('handoff-list');
-  keepPlace(container, () => renderRows(container));
+  keepPlace(container, () => mode() === 'inbox' ? renderInbox(container) : renderRows(container));
+  if (!state.selected) $('detail').replaceChildren(idlePanel());
 }
 
-// The summary at the top of a handoff: the saving agent's paragraph or two. Short or missing summaries (older
-// handoffs) are filled out with where things stand and the first next step.
-function glance(parent, context, data) {
-  const box = el('section', 'glance');
-  box.setAttribute('aria-label', 'Summary');
-  box.append(el('span', 'glance-label', 'Summary'));
+// Summary paragraphs: the saving agent's paragraph or two. Short or missing summaries (older handoffs) are filled out
+// with where things stand and the first next step.
+function summary(parent, context, data) {
+  const box = el('div', 'detail-summary');
   const paragraphs = (context.summary || '').split(/\n\s*\n/).map((text) => text.trim()).filter(Boolean);
   if (!paragraphs.length) paragraphs.push(context.objective.trim());
   const brief = paragraphs.length < 2 && paragraphs[0].length < 320;
@@ -168,14 +175,6 @@ function glance(parent, context, data) {
     next.append(el('strong', '', 'Next: '), document.createTextNode(first.action));
     box.append(next);
   }
-  const facts = [`${context.next_steps.length} next step${context.next_steps.length === 1 ? '' : 's'}`];
-  const questions = context.open_questions.length;
-  if (questions) {
-    const waiting = data.completion ? 0 : questions - (data.answers || []).length;
-    facts.push(waiting ? `${waiting} of ${questions} question${questions === 1 ? '' : 's'} waiting for you` : `${questions} question${questions === 1 ? '' : 's'}${data.completion ? '' : ', all answered'}`);
-  }
-  if (data.completion) facts.unshift(`Done: ${data.completion.outcome}`);
-  box.append(el('p', 'glance-facts', facts.join(' · ')));
   parent.append(box);
 }
 
@@ -192,32 +191,57 @@ function byProject(items) {
   return keys.map((key) => [key, groups.get(key)]);
 }
 
+// Rows under small project labels. A label is only shown when it tells you something: several projects, and no
+// project filter already applied.
+function groupedRows(container, items, options = {}) {
+  const groups = byProject(items);
+  const labelled = !state.project && !(groups.length === 1 && groups[0][0] === '') && (groups.length > 1 || options.alwaysLabel);
+  for (const [project, rows] of groups) {
+    if (labelled) {
+      const label = project ? button(project, 'project-label', () => setProject(project)) : el('div', 'project-label none', 'No project');
+      if (project) label.title = `Show only ${project}`;
+      container.append(label);
+    }
+    for (const item of rows) container.append(handoffRow(item, { showProject: !labelled && !state.project, ...options }));
+  }
+}
+
+function emptyList(container, title, text, ...actions) {
+  const empty = el('div', 'empty-list');
+  empty.append(el('strong', '', title), el('p', '', text), ...actions);
+  container.append(empty);
+}
+
+function renderInbox(container) {
+  container.replaceChildren();
+  const { needs, ready, busy } = state.sections;
+  if (!needs.length && !ready.length && !busy.length) {
+    if (state.project) emptyList(container, `Nothing open in ${state.project}.`, 'Its handoffs are all done.', button('Show all projects', 'button secondary', () => setProject('')));
+    else if (state.total) emptyList(container, 'You’re all caught up.', 'Nothing is waiting. When an agent saves a handoff, it appears here, ready for the next one to continue.');
+    else emptyList(container, 'No handoffs yet.', 'Ask your AI agent to save a handoff. Its context will appear here, ready for the next session.', button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
+  }
+  for (const [title, items, note] of [['Needs you', needs, 'Answer before the next agent continues'], ['Ready to continue', ready, ''], ['With an agent', busy, '']]) {
+    if (!items.length) continue;
+    const heading = el('div', 'list-section');
+    heading.append(el('h2', '', title), el('span', 'count', items.length));
+    container.append(heading);
+    if (note) container.append(el('p', 'list-section-note', note));
+    groupedRows(container, items);
+  }
+  $('load-more').hidden = true;
+}
+
 function renderRows(container) {
   container.replaceChildren();
   if (!state.items.length) {
-    const empty = el('div', 'empty-list');
-    const narrowed = ['search', 'project-filter', 'target-filter'].some((id) => $(id).value.trim());
-    if (state.status === 'needs_you' && !narrowed) empty.append(el('strong', '', 'Nothing needs you right now.'), el('p', '', 'When an agent saves a handoff with open questions, it appears here so you can answer before the next agent picks it up.'));
-    else if (filtered()) empty.append(el('strong', '', 'No matching handoffs.'), el('p', '', 'Nothing matches this search or filter.'), button('Clear filters', 'button secondary', clearFilters));
-    else empty.append(el('strong', '', 'No handoffs here yet.'), el('p', '', 'Ask your AI agent to save a handoff. Its context will appear here, ready for the next session.'), button('Connect your agents ↗', 'button secondary', () => $('setup-dialog').showModal()));
-    container.append(empty);
+    if (mode() === 'search' || state.project) emptyList(container, 'No matching handoffs.', 'Nothing matches this search or project.', button('Clear filters', 'button secondary', clearFilters));
+    else emptyList(container, 'Nothing done yet.', 'When an agent finishes a handoff, its outcome appears here.');
   }
-  const groups = byProject(state.items);
-  // Headings only help when there's more than one group and no project filter already narrows the list.
-  const headings = !$('project-filter').value && !(groups.length === 1 && groups[0][0] === '');
-  for (const [project, items] of groups) {
-    if (headings) {
-      const heading = project ? button('', 'group-heading', () => { $('project-filter').value = project; loadList(); }) : el('div', 'group-heading no-project');
-      if (project) heading.title = `Show only ${project}`;
-      heading.append(el('span', '', project || 'No project'), el('span', 'count', items.length));
-      container.append(heading);
-    }
-    for (const item of items) container.append(handoffRow(item, !headings));
-  }
+  groupedRows(container, state.items, { showStatus: mode() === 'search' });
   $('load-more').hidden = !state.cursor;
 }
 
-function handoffRow(item, showProject) {
+function handoffRow(item, { showProject = false, showStatus = false } = {}) {
   const row = button('', 'handoff-row' + (item.id === state.selected ? ' selected' : ''), () => choose(item.id, true, true));
   row.dataset.key = item.id;
   row.setAttribute('aria-pressed', String(item.id === state.selected));
@@ -226,39 +250,70 @@ function handoffRow(item, showProject) {
   when.dateTime = item.created_at;
   when.title = date(item.created_at);
   top.append(el('span', 'row-title', item.title), when);
-  const bottom = el('div', 'row-bottom');
-  bottom.append(badge(item.effective_status));
-  if (item.needs_you) {
-    const waiting = item.questions.open - item.questions.answered;
-    bottom.append(el('span', 'badge needs_you', `${waiting} question${waiting === 1 ? '' : 's'} for you`));
-  }
-  if (showProject && item.project_key) bottom.append(el('span', 'project-tag', item.project_key));
-  bottom.append(el('span', 'agent-route', item.claim.active ? `with ${item.claim.holder_label}` : `${item.source_client} → ${item.target_client || 'any agent'}`));
-  // A lapsed claim isn't proof the agent stopped, but anyone can pick the handoff up now.
-  if (item.status === 'claimed' && !item.claim.active) bottom.append(el('span', 'row-note', `${item.claim.holder_label}'s claim expired`));
-  row.append(top, el('div', 'row-preview', item.preview), bottom);
+  const meta = el('div', 'row-meta');
+  // A badge only when it tells you something the section doesn't.
+  if (item.needs_you) meta.append(badge('needs_you', plural(waitingQuestions(item), 'question') + ' for you'));
+  else if (item.claim.active) meta.append(badge('claimed', 'With ' + agentName(item.claim.holder_label)));
+  else if (showStatus && item.effective_status === 'completed') meta.append(badge('completed', 'Done'));
+  else if (showStatus) meta.append(badge('available', 'Ready'));
+  const facts = [];
+  if (showProject && item.project_key) facts.push(item.project_key);
+  facts.push('from ' + agentName(item.source_client));
+  if (item.target_client && !item.claim.active && item.effective_status !== 'completed') facts.push('for ' + agentName(item.target_client));
+  meta.append(el('span', 'row-facts', facts.join(' · ')));
+  // A lapsed claim isn't proof the agent stopped, but anyone can continue it now.
+  if (item.status === 'claimed' && !item.claim.active) meta.append(el('span', 'row-note', `${agentName(item.claim.holder_label)}’s claim expired`));
+  row.append(top, el('div', 'row-preview', item.preview), meta);
   return row;
+}
+
+async function fetchAll(status, pages = 5) {
+  let items = [], cursor = null;
+  for (let page = 0; page < pages; page += 1) {
+    const query = new URLSearchParams({ status, limit: '20' });
+    if (state.project) query.set('project_key', state.project);
+    if (cursor) query.set('cursor', cursor);
+    const response = await api('/api/handoffs?' + query);
+    items = items.concat(response.data.items);
+    cursor = response.data.next_cursor;
+    if (!cursor) break;
+  }
+  return items;
+}
+
+async function loadInbox(generation) {
+  const [needs, available, claimed] = await Promise.all([fetchAll('needs_you'), fetchAll('available'), fetchAll('claimed')]);
+  if (generation !== state.generation) return;
+  const asking = new Set(needs.map((item) => item.id));
+  const sections = { needs, ready: available.filter((item) => !asking.has(item.id)), busy: claimed.filter((item) => !asking.has(item.id)) };
+  const view = JSON.stringify(['inbox', sections, state.project, state.selected, state.total]);
+  state.sections = sections;
+  state.items = [...sections.needs, ...sections.ready, ...sections.busy];
+  state.cursor = null;
+  state.pages = 1;
+  if (view !== state.view_) { state.view_ = view; renderList(); }
 }
 
 async function loadList(append = false) {
   const generation = ++state.generation;
-  const query = new URLSearchParams({ status: state.status, limit: '20' });
-  for (const [field, id] of [['q', 'search'], ['project_key', 'project-filter'], ['target_client', 'target-filter']]) {
-    if ($(id).value.trim()) query.set(field, $(id).value.trim());
-  }
-  if (append && state.cursor) query.set('cursor', state.cursor);
-  $('load-more').disabled = true;
+  $('page-title').textContent = labels[mode()];
   try {
-    const response = await api('/api/handoffs?' + query);
-    if (generation !== state.generation) return;
-    const items = append ? [...state.items, ...response.data.items] : response.data.items;
-    const view = JSON.stringify([items, response.data.next_cursor, filtered(), state.selected]);
-    const changed = view !== state.view;
-    state.view = view;
-    state.items = items;
-    state.cursor = response.data.next_cursor;
-    state.pages = append ? state.pages + 1 : 1;
-    if (changed) renderList();
+    if (mode() === 'inbox') await loadInbox(generation);
+    else {
+      const query = new URLSearchParams({ status: mode() === 'done' ? 'completed' : 'all', limit: '20' });
+      if (searching()) query.set('q', $('search').value.trim());
+      if (state.project) query.set('project_key', state.project);
+      if (append && state.cursor) query.set('cursor', state.cursor);
+      $('load-more').disabled = true;
+      const response = await api('/api/handoffs?' + query);
+      if (generation !== state.generation) return;
+      const items = append ? [...state.items, ...response.data.items] : response.data.items;
+      const view = JSON.stringify([mode(), items, response.data.next_cursor, state.project, state.selected]);
+      state.items = items;
+      state.cursor = response.data.next_cursor;
+      state.pages = append ? state.pages + 1 : 1;
+      if (view !== state.view_) { state.view_ = view; renderList(); }
+    }
     $('sync-state').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     error();
   } catch (exception) { error(exception.message); }
@@ -297,91 +352,136 @@ function evidence(card, item) {
   if (item.evidence_ids?.length) card.append(el('div', 'evidence-ids', 'Evidence: ' + item.evidence_ids.join(', ')));
 }
 
+// A collapsed section for everything that isn't needed to act. Remembers whether you opened it.
+function fold(parent, title, build) {
+  const node = el('details', 'fold');
+  node.open = state.folds.has(title);
+  node.addEventListener('toggle', () => { if (node.open) state.folds.add(title); else state.folds.delete(title); });
+  const body = el('div', 'fold-body');
+  build(body);
+  if (!body.childElementCount) return null;
+  node.append(el('summary', '', title), body);
+  parent.append(node);
+  return node;
+}
+
+function statusBadge(data) {
+  if (data.completion) return badge('completed', `Done · ${data.completion.outcome}`);
+  const waiting = data.record.context.open_questions.length - (data.answers || []).length;
+  if (waiting > 0) return badge('needs_you', 'Needs you');
+  if (data.claim.active) return badge('claimed', 'With ' + agentName(data.claim.holder_label));
+  return badge('available', 'Ready');
+}
+
+function moreMenu(data) {
+  const menu = el('details', 'more-menu');
+  const toggle = el('summary', '', '⋯');
+  toggle.setAttribute('aria-label', 'More actions');
+  toggle.title = 'More actions';
+  const items = el('div', 'more-items');
+  const close = (callback) => () => { menu.open = false; callback(); };
+  items.append(button('Copy full record', '', close(() => copy(JSON.stringify(data, null, 2)))),
+               button('Copy ID', '', close(() => copy(data.id))),
+               button('Delete', 'danger-text', close(() => confirmDelete(data))));
+  menu.append(toggle, items);
+  return menu;
+}
+
 function renderDetail(data) {
   const panel = $('detail');
   panel.replaceChildren();
   const record = data.record;
   const context = record.context;
   const header = el('header', 'detail-header');
-  header.append(backButton(labels[state.status], closeDetail));
-  const status = el('div', 'detail-status');
-  const saved = el('time', '', 'Saved ' + since(data.created_at));
-  saved.dateTime = data.created_at;
-  saved.title = date(data.created_at);
-  const statusBadge = badge(data.effective_status);
-  if (data.completion) statusBadge.textContent = `Completed · ${data.completion.outcome}`;
-  status.append(statusBadge, saved);
-  const route = el('p', 'detail-route');
-  route.append(el('strong', '', record.source.client), el('span', '', ' → '), el('strong', '', record.target_client || 'any agent'));
-  if (record.project_key) route.append(el('span', 'project-tag', record.project_key));
-  const actions = el('div', 'detail-actions');
-  actions.append(button('Copy resume prompt', 'button primary', () => copy(`Resume Handoff ${data.id}`)), button('Copy full record', 'button secondary', () => copy(JSON.stringify(data, null, 2))),
-                 button('Delete', 'button danger', () => confirmDelete(data)));
-  const id = el('div', 'id-row');
-  id.append(el('code', '', data.id), button('Copy ID', 'copy-small', () => copy(data.id)));
+  const bar = el('div', 'detail-bar');
+  bar.append(backButton(labels[mode()], closeDetail), moreMenu(data));
   const title = el('h2', '', record.title);
   title.tabIndex = -1;
-  header.append(status, title, route);
-  glance(header, context, data);
-  header.append(actions, id);
-  if (data.claim.holder_label && data.claim.active) {
-    header.append(el('p', 'claim-note', `Picked up by ${data.claim.holder_label}; its claim lasts until ${date(data.claim.expires_at)}.`));
-  } else if (data.status === 'claimed') {
-    header.append(el('p', 'claim-note', `${data.claim.holder_label}'s claim expired ${date(data.claim.expires_at)}. Any agent can pick this up now.`));
-  }
+  const meta = el('p', 'detail-meta');
+  const saved = el('time', '', since(data.created_at));
+  saved.dateTime = data.created_at;
+  saved.title = date(data.created_at);
+  meta.append(statusBadge(data), el('span', '', `Saved by ${agentName(record.source.client)} ·`), saved);
+  if (record.target_client && !data.completion) meta.append(el('span', '', `· for ${agentName(record.target_client)}`));
+  if (record.project_key) meta.append(button(record.project_key, 'project-tag', () => { setProject(record.project_key); closeDetail(); }));
+  header.append(bar, title, meta);
+  summary(header, context, data);
   const content = el('div', 'detail-content');
-  questions(content, data);
+  // With questions still unanswered, answering comes first and continuing second.
+  const waiting = !data.completion && data.record.context.open_questions.length > (data.answers || []).length;
   if (data.completion) {
-    const complete = section(content, 'Outcome');
-    const card = el('div', 'detail-card outcome-card');
-    card.append(el('span', 'card-label', data.completion.outcome), el('p', '', data.completion.summary));
-    complete.append(card);
-    cards(content, 'Acceptance results', data.completion.acceptance_results, (card, item) => { card.append(el('span', 'card-label', item.result), el('strong', '', item.criterion), el('p', 'muted', item.evidence)); });
+    // Done: nothing to continue.
+  } else if (data.claim.active) {
+    header.append(el('p', 'claim-note', `${agentName(data.claim.holder_label)} is working on this. Its claim lasts until ${date(data.claim.expires_at)}.`));
+  } else {
+    if (data.status === 'claimed') header.append(el('p', 'claim-note', `${agentName(data.claim.holder_label)}’s claim expired ${date(data.claim.expires_at)}. Any agent can continue it now.`));
+    const resume = el('div', 'resume-box');
+    const text = el('div', 'resume-text');
+    text.append(el('span', 'resume-label', waiting ? 'Then continue in another agent' : 'Continue in another agent'), el('code', '', `Resume Handoff ${data.id}`));
+    resume.append(text, button('Copy resume prompt', waiting ? 'button secondary' : 'button primary', () => copy(`Resume Handoff ${data.id}`)));
+    state.resumeBox = resume;
+  }
+  if (!waiting && state.resumeBox) header.append(state.resumeBox);
+  if (data.completion) {
+    const outcome = section(content, 'Outcome');
+    outcome.append(el('p', '', data.completion.summary));
     listSection(content, 'Remaining work', data.completion.remaining_work);
   }
-  textSection(content, 'Objective', context.objective);
-  textSection(content, 'Where things stand', context.current_state);
-  const next = section(content, 'Next steps');
-  const ordered = el('ol', 'steps');
-  for (const step of context.next_steps) { const li = el('li', 'next-step'); li.append(el('strong', '', step.action), el('span', 'done-when', 'Done when: ' + step.done_when)); ordered.append(li); }
-  next.append(ordered);
-  listSection(content, 'Definition of done', context.acceptance_criteria);
-  cards(content, 'Decisions & reasons', context.decisions, (card, item) => { card.append(el('strong', '', item.decision), el('p', 'muted', item.reason)); evidence(card, item); });
-  cards(content, 'What has been tried', context.attempts, (card, item) => { card.append(el('span', 'card-label', item.verification.replaceAll('_', ' ')), el('strong', '', item.action), el('p', 'muted', item.result)); evidence(card, item); });
-  textSection(content, 'Background', context.background);
-  listSection(content, 'Constraints', context.constraints);
-  cards(content, 'Facts & assumptions', context.facts, (card, item) => { card.append(el('span', 'card-label', item.basis), el('p', '', item.text)); evidence(card, item); });
-  listSection(content, 'Source resume suggestions', context.resume_instructions);
+  questions(content, data);
+  if (waiting && state.resumeBox) content.append(state.resumeBox);
+  state.resumeBox = null;
+  if (!data.completion) {
+    const next = section(content, 'Next steps');
+    const ordered = el('ol', 'steps');
+    for (const step of context.next_steps) { const li = el('li', 'next-step'); li.append(el('span', 'step-action', step.action), el('span', 'done-when', 'Done when: ' + step.done_when)); ordered.append(li); }
+    next.append(ordered);
+  }
   const renderReference = (card, item) => {
     card.append(el('span', 'card-label', `${item.id} · ${item.kind} · ${item.availability.replaceAll('_', ' ')}`), el('strong', '', item.purpose), el('p', 'mono', item.locator));
     if (item.excerpt) card.append(el('pre', '', item.excerpt));
     if (item.sha256) card.append(el('p', 'small mono', 'SHA-256: ' + item.sha256));
     if (item.observed_at) card.append(el('p', 'small muted', 'Observed ' + date(item.observed_at)));
   };
-  cards(content, 'References', record.references, renderReference);
-  if (data.completion) cards(content, 'Result artifacts', data.completion.artifacts, renderReference);
-  textSection(content, 'Summary coverage', record.coverage.basis);
-  listSection(content, 'Omitted context', record.coverage.omitted);
-  const source = section(content, 'Source & scope');
-  source.append(el('p', '', record.authorization.scope));
-  if (record.authorization.user_request_excerpt) source.append(el('p', 'muted', record.authorization.user_request_excerpt));
-  listSection(content, 'Reported confirmation requirements', record.authorization.requires_confirmation);
-  source.append(el('p', 'small muted', `Authored as ${record.source.authoring_method.replaceAll('_', ' ')} · ${record.source.transfer_method.replaceAll('_', ' ')}`));
-  if (record.source.model) source.append(el('p', 'small muted', 'Model: ' + record.source.model));
-  if (record.source.captured_at) source.append(el('p', 'small muted', 'Captured: ' + date(record.source.captured_at)));
-  if (record.source.conversation_ref) source.append(el('p', 'small mono', record.source.conversation_ref));
-  if (record.parent_id) source.append(button('View parent handoff', 'button secondary', () => choose(record.parent_id)));
-  const metadata = el('dl', 'metadata');
-  const fields = [['From', record.source.client], ['To', record.target_client || 'Any agent'], ['Project', record.project_key || 'No project'], ['Created', date(data.created_at)], ['Last updated', date(data.updated_at)], ['Revision', data.revision]];
-  if (data.claim.holder_label) fields.push(['Claim holder', data.claim.holder_label], ['Claim expires', date(data.claim.expires_at) + (data.claim.active ? '' : ' (inactive)')]);
-  for (const [key, value] of fields) { const pair = el('div'); pair.append(el('dt', '', key), el('dd', '', value)); metadata.append(pair); }
-  section(content, 'Details').append(metadata);
-  const activity = section(content, 'Activity');
-  activity.id = 'activity';
-  activity.append(el('p', 'small muted', 'Loading history…'));
-  const raw = el('details', 'raw-details');
-  raw.append(el('summary', '', 'Full record · schema ' + record.schema_version), el('pre', '', JSON.stringify(data, null, 2)));
-  content.append(raw, el('p', 'trust-note', data.trust_notice));
+  fold(content, 'Details', (body) => {
+    textSection(body, 'Objective', context.objective);
+    textSection(body, 'Where things stand', context.current_state);
+    if (data.completion) listSection(body, 'Planned next steps', context.next_steps.map((step) => step.action));
+    listSection(body, 'Definition of done', context.acceptance_criteria);
+    if (data.completion) cards(body, 'Acceptance results', data.completion.acceptance_results, (card, item) => { card.append(el('span', 'card-label', item.result), el('strong', '', item.criterion), el('p', 'muted', item.evidence)); });
+    cards(body, 'Decisions & reasons', context.decisions, (card, item) => { card.append(el('strong', '', item.decision), el('p', 'muted', item.reason)); evidence(card, item); });
+    cards(body, 'What has been tried', context.attempts, (card, item) => { card.append(el('span', 'card-label', item.verification.replaceAll('_', ' ')), el('strong', '', item.action), el('p', 'muted', item.result)); evidence(card, item); });
+    textSection(body, 'Background', context.background);
+    listSection(body, 'Constraints', context.constraints);
+    cards(body, 'Facts & assumptions', context.facts, (card, item) => { card.append(el('span', 'card-label', item.basis), el('p', '', item.text)); evidence(card, item); });
+    cards(body, 'References', record.references, renderReference);
+    if (data.completion) cards(body, 'Result artifacts', data.completion.artifacts, renderReference);
+  });
+  let activity;
+  fold(content, 'Record & history', (body) => {
+    activity = section(body, 'Activity');
+    activity.id = 'activity';
+    activity.append(el('p', 'small muted', 'Loading history…'));
+    const source = section(body, 'Source & scope');
+    source.append(el('p', '', record.authorization.scope));
+    if (record.authorization.user_request_excerpt) source.append(el('p', 'muted', record.authorization.user_request_excerpt));
+    source.append(el('p', 'small muted', `Authored as ${record.source.authoring_method.replaceAll('_', ' ')} · ${record.source.transfer_method.replaceAll('_', ' ')}`));
+    if (record.source.model) source.append(el('p', 'small muted', 'Model: ' + record.source.model));
+    if (record.source.captured_at) source.append(el('p', 'small muted', 'Captured: ' + date(record.source.captured_at)));
+    if (record.source.conversation_ref) source.append(el('p', 'small mono', record.source.conversation_ref));
+    if (record.parent_id) source.append(button('View parent handoff', 'button secondary', () => choose(record.parent_id)));
+    listSection(body, 'Reported confirmation requirements', record.authorization.requires_confirmation);
+    listSection(body, 'Suggestions for the next agent', context.resume_instructions);
+    textSection(body, 'Summary coverage', record.coverage.basis);
+    listSection(body, 'Omitted context', record.coverage.omitted);
+    const metadata = el('dl', 'metadata');
+    const fields = [['From', record.source.client], ['To', record.target_client || 'Any agent'], ['Project', record.project_key || 'No project'], ['Created', date(data.created_at)], ['Last updated', date(data.updated_at)], ['Revision', data.revision], ['ID', data.id]];
+    if (data.claim.holder_label) fields.push(['Claim holder', data.claim.holder_label], ['Claim expires', date(data.claim.expires_at) + (data.claim.active ? '' : ' (inactive)')]);
+    for (const [key, value] of fields) { const pair = el('div'); pair.append(el('dt', '', key), el('dd', '', value)); metadata.append(pair); }
+    section(body, 'Metadata').append(metadata);
+    const raw = el('details', 'raw-details');
+    raw.append(el('summary', '', 'Full record · schema ' + record.schema_version), el('pre', '', JSON.stringify(data, null, 2)));
+    body.append(raw, el('p', 'trust-note', data.trust_notice));
+  });
   panel.append(header, content);
   if (state.focusDetail) { state.focusDetail = false; title.focus({ preventScroll: !narrow() }); }
   loadEvents(data.id, activity).catch((exception) => { activity.append(el('p', 'error', exception.message)); });
@@ -440,7 +540,7 @@ async function submitAnswer(id, index, box, control) {
     drafts.delete(`${id}:${index}`);
     if (state.selected === id) { state.detail = response.data; renderDetail(response.data); }
     showToast('Answer saved');
-    overview().then(() => loadList()).catch((exception) => error(exception.message));
+    overview().then(() => loadList()).catch((exception) => error(exception.message));  // it may leave Needs you
   } catch (exception) { showToast(exception.message); control.disabled = false; }
 }
 
@@ -525,7 +625,7 @@ function emptyDetail() {
   const steps = el('ol', 'empty-steps');
   for (const [title, text] of [['Save', 'In any connected agent, say “Save a handoff so I can continue later.”'],
                                ['Resume', 'In another agent, paste the prompt it returns: “Resume Handoff <id>”.'],
-                               ['Track', 'Select a handoff here to see its objective, decisions and next steps.']]) {
+                               ['Track', 'Select a handoff here to see its summary, questions and next steps.']]) {
     const li = el('li');
     li.append(el('strong', '', title), el('span', '', text));
     steps.append(li);
@@ -535,13 +635,32 @@ function emptyDetail() {
   return empty;
 }
 
+// The right-hand panel when nothing is selected: what to do next, or the getting-started steps in an empty workspace.
+function idlePanel() {
+  const item = mode() === 'inbox' ? state.sections.needs[0] || state.sections.ready[0] : null;
+  if (!item) return state.total ? quiet() : emptyDetail();
+  const card = el('div', 'empty-detail next-up');
+  card.append(el('span', 'resume-label', 'Next up'), el('h2', '', item.title), el('p', 'next-up-preview', item.preview));
+  const actions = el('div', 'next-up-actions');
+  if (item.needs_you) actions.append(button(`Answer ${plural(waitingQuestions(item), 'question')}`, 'button primary', () => choose(item.id, true, true)));
+  else actions.append(button('Copy resume prompt', 'button primary', () => copy(`Resume Handoff ${item.id}`)), button('Open', 'button secondary', () => choose(item.id, true, true)));
+  card.append(actions);
+  return card;
+}
+
+function quiet() {
+  const node = el('div', 'empty-detail');
+  node.append(el('span', 'empty-icon', '✓'), el('h2', '', mode() === 'inbox' ? 'Nothing waiting on you' : 'Select a handoff'),
+              el('p', '', mode() === 'inbox' ? 'When an agent saves a handoff or asks you something, it shows up here.' : 'Its outcome, summary and history open here.'));
+  return node;
+}
+
 function closeDetail() {
   const position = state.listScroll || 0;
   const previous = state.selected;
   state.selected = null;
   state.detail = null;
   history.pushState({}, '', '/');
-  $('detail').replaceChildren(emptyDetail());
   renderList();
   syncPanes();
   if (narrow()) scrollTo({ top: position, behavior: 'instant' });
@@ -549,32 +668,29 @@ function closeDetail() {
 }
 
 async function refresh() {
-  $('refresh-button').disabled = true;
   try {
     await overview();
     await loadList();
     if (state.selected) await detail(state.selected, true);
   } catch (exception) { error(exception.message); }
-  finally { $('refresh-button').disabled = false; }
 }
 
 async function enter() {
-  if (!state.selected) $('detail').replaceChildren(emptyDetail());
+  if (!state.selected) $('detail').replaceChildren(loading('Loading…'));
   await refresh();
 }
 
 for (const item of document.querySelectorAll('[data-status]')) item.addEventListener('click', () => {
   showMemoryView(false);
   history.pushState({}, '', state.selected ? '/handoffs/' + encodeURIComponent(state.selected) : '/');
-  state.status = item.dataset.status;
+  state.view = item.dataset.status;
+  $('search').value = '';
   for (const other of document.querySelectorAll('[data-status]')) other.classList.toggle('active', other === item);
-  $('page-title').textContent = labels[state.status];
   revealActiveChip();
   loadList();
 });
 $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadList(), 250); });
-for (const id of ['project-filter', 'target-filter']) $(id).addEventListener('change', () => loadList());
-$('refresh-button').addEventListener('click', refresh);
+$('project-chip').addEventListener('click', () => setProject(''));
 $('load-more').addEventListener('click', () => loadList(true));
 const mcpUrl = new URL('/mcp', location.origin).href;
 $('mcp-url').textContent = mcpUrl;
@@ -714,7 +830,7 @@ function showMemoryView(active) {
   $('handoff-view').hidden = active;
   $('memory-view').hidden = !active;
   $('memories-button').classList.toggle('active', active);
-  for (const item of document.querySelectorAll('[data-status]')) item.classList.toggle('active', !active && item.dataset.status === state.status);
+  for (const item of document.querySelectorAll('[data-status]')) item.classList.toggle('active', !active && item.dataset.status === state.view);
   revealActiveChip();
 }
 

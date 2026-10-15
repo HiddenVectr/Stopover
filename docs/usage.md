@@ -27,14 +27,15 @@ Open the dashboard. Search by title, project, or ID, or choose a status:
 | In progress | An agent holds a claim, normally for one hour. |
 | Completed | The attempt ended; its outcome may be succeeded, blocked, or abandoned. |
 
-The list groups handoffs by project (select a project's heading to show only that project), newest first, with handoffs that have no project last. Each one shows the start of its summary, so you can see what to resume without opening it. The sidebar sorts them by what to do next:
+The dashboard opens on the **Inbox**: open work, sorted by what to do next.
 
-- **Needs you**: open handoffs whose agent left questions you haven't answered.
-- **Ready to pick up**: waiting for an agent. A note shows when an earlier agent's claim expired.
-- **Picked up**: an agent has claimed it. A claim says an agent took the work, not that it's still running.
-- **Done**: an agent recorded the outcome.
+- **Needs you**: handoffs whose agent left questions you haven't answered.
+- **Ready to continue**: waiting for the next agent. A note shows when an earlier agent's claim expired.
+- **With an agent**: an agent has claimed it. A claim says an agent took the work, not that it's still running.
 
-Select a handoff to read its context and activity. The **Summary** at the top says what the work is, what's decided, where it stopped and what's next. Under it, **Questions for you** lists the agent's open questions: type an answer and select **Save answer**. Answers never change the saved record; the next agent to read or resume the handoff gets them alongside it, even after the original session has ended. **Copy resume prompt** gives you the text to paste into an agent, and **Delete** removes the handoff with its answers and history (it asks first, and warns you if an agent has it picked up). The dashboard normally refreshes every 15 seconds; use **Refresh** to check for changes immediately.
+Finished handoffs move to **Done**. Within each section, handoffs are grouped under their project when there are several; select a project to show only that one. Search covers every handoff. With nothing selected, the right-hand side shows **Next up**: the first handoff waiting on you, or the next one ready to continue.
+
+Select a handoff to open it. The top shows its status, who saved it, the summary, and **Continue in another agent** with the `Resume Handoff <id>` prompt to copy. If the agent left questions, **Questions for you** comes first: type an answer and select **Save answer**. Answers never change the saved record; the next agent to read or resume the handoff gets them alongside it, even after the original session has ended. Next steps follow, and the rest of the record (objective, decisions, background, references, activity and the full JSON) is folded under **Details** and **Record & history**. The **⋯** menu has Copy full record, Copy ID and **Delete**, which removes the handoff with its answers and history (it asks first, and warns you if an agent has it). The dashboard refreshes every 15 seconds.
 
 For a clearly labeled example, run `docker exec stopover python -m stopover seed-demo`. The app does not create examples automatically.
 

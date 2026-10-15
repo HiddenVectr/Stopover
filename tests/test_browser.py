@@ -25,7 +25,7 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(live_server["url"])
-        expect(page.get_by_role("heading", name="All handoffs", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Inbox", exact=True)).to_be_visible()
         expect(page.locator("#signin-dialog")).not_to_be_visible()
         expect(page.locator("#signout-button")).to_be_hidden()
         row = page.locator(".handoff-row").filter(has_text=args["record"]["title"])
@@ -53,10 +53,13 @@ def test_dashboard_details_search_filters_mobile_and_safe_text(live_server, reco
         page.get_by_role("button", name="Clear filters").click()
         expect(row).to_be_visible()
         expect(page.get_by_label("Search handoffs")).to_have_value("")
-        page.locator('[data-status="completed"]').click()
-        expect(page.get_by_text("No matching handoffs.")).to_be_visible()
-        page.locator('[data-status="all"]').click()
+        page.locator('[data-status="done"]').click()
+        expect(page.get_by_text("Nothing done yet.")).to_be_visible()
+        page.locator('[data-status="inbox"]').click()
         expect(row).to_be_visible()
+        # Less-used actions sit behind the More menu.
+        expect(page.get_by_role("button", name="Copy ID", exact=True)).to_be_hidden()
+        page.get_by_label("More actions").click()
         page.get_by_role("button", name="Copy ID", exact=True).click()
         expect(page.locator("#toast")).to_have_text("Copied to clipboard")
         assert page.evaluate("navigator.clipboard.readText()") == handoff_id
@@ -133,8 +136,8 @@ def test_personal_memories_browse_search_refresh_and_mobile(live_server):
         expect(page.locator('#memory-detail')).to_contain_text('FORGOTTEN MEMORY')
         expect(page.locator('#memory-detail')).not_to_contain_text('A corrected personal preference.')
         expect(page.locator('#memory-total')).to_have_text('24')
-        page.locator('[data-status="all"]').click()
-        expect(page.get_by_role('heading', name='All handoffs', exact=True)).to_be_visible()
+        page.locator('[data-status="inbox"]').click()
+        expect(page.get_by_role('heading', name='Inbox', exact=True)).to_be_visible()
         page.go_back()
         expect(page.get_by_role('heading', name='Personal memories', exact=True)).to_be_visible()
         assert not errors, errors
@@ -380,13 +383,13 @@ def test_inbox_groups_by_project_answers_questions_and_deletes(live_server, reco
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(url)
-        # Grouped by project, newest project first; handoffs without a project come last.
-        expect(page.locator(".group-heading")).to_have_count(3)
-        assert [t.split("\n")[0] for t in page.locator(".group-heading").all_inner_texts()] == ["web", "api", "No project"]
+        # The inbox: what needs you first, then what's ready, each grouped by project when there are several.
+        expect(page.locator(".list-section h2")).to_have_text(["Needs you", "Ready to continue"])
+        expect(page.locator(".project-label")).to_have_text(["api", "No project"])
         expect(page.locator("#count-needs_you")).to_have_text("1")
-        page.locator('[data-status="needs_you"]').click()
-        expect(page.locator(".handoff-row")).to_have_count(1)
-        row = page.locator(".handoff-row").filter(has_text="Add CSV export")
+        expect(page.locator(".next-up")).to_contain_text("Add CSV export")  # nothing selected: what to do next
+        row = page.locator(".handoff-row").first
+        expect(row).to_contain_text("Add CSV export")
         expect(row).to_contain_text("1 question for you")
         row.click()
         # The summary sits at the top, as paragraphs.
@@ -395,8 +398,10 @@ def test_inbox_groups_by_project_answers_questions_and_deletes(live_server, reco
         page.get_by_role("button", name="Save answer").click()
         expect(page.locator("#toast")).to_have_text("Answer saved")
         expect(page.locator(".question-card .answer")).to_have_text("Date, amount and payee")
-        expect(page.locator("#count-needs_you")).to_have_text("0")
-        expect(page.get_by_text("Nothing needs you right now.")).to_be_visible()
+        expect(page.locator("#count-needs_you")).to_be_hidden()
+        expect(page.locator(".list-section h2")).to_have_text(["Ready to continue"])
+        # Answered, so continuing is the main action again.
+        expect(page.locator(".detail-header .resume-box")).to_contain_text("Continue in another agent")
         # Playwright runs its own event loop here, so the MCP call goes on another thread.
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(1) as pool:
@@ -404,16 +409,17 @@ def test_inbox_groups_by_project_answers_questions_and_deletes(live_server, reco
         assert resumed["answers"][0]["answer"] == "Date, amount and payee"
         # Deleting asks first, and warns that an agent has it.
         page.reload()
+        page.get_by_label("More actions").click()
         page.get_by_role("button", name="Delete", exact=True).click()
         expect(page.locator("#delete-text")).to_contain_text("codex has picked this up")
         page.get_by_role("button", name="Cancel").click()
         expect(page.locator("#detail h2")).to_have_text("Add CSV export")
+        page.get_by_label("More actions").click()
         page.get_by_role("button", name="Delete", exact=True).click()
         page.get_by_role("button", name="Delete handoff").click()
         expect(page.locator("#toast")).to_have_text("Handoff deleted")
-        page.locator('[data-status="all"]').click()
         expect(page.locator(".handoff-row")).to_have_count(2)
-        expect(page.locator(".group-heading")).to_have_count(2)
+        expect(page.locator(".project-label")).to_have_count(2)
         page.set_viewport_size({"width": 390, "height": 844})
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert not errors, errors
