@@ -1,15 +1,19 @@
 # Stopover
 
-**Hand work between AI coding agents, and give every agent the same picture of you.**
+**A self-hosted inbox for your AI agents' work.**
 
-Stopover is a small, self-hosted server with a web dashboard. Agents connect to it through MCP, the protocol they use to call external tools. It gives them two separate features:
+You use more than one AI agent: Claude Code today, Codex when you hit a usage limit, Cursor on the other machine. Each one starts from zero. Stopover gives them one place to leave work and pick it up again, and gives you one place to see what's waiting.
 
-- **Handoffs:** save a task in one agent (its goal, decisions, progress and next steps) and continue it in another.
-- **Personal memory:** one shared set of your preferences, habits and ongoing context that every connected agent can read and update.
+- **Hand work between agents.** Say "save a handoff" in one agent. Another agent, even on another machine, resumes with the goal, decisions, progress and next steps, without you re-explaining anything.
+- **See what needs you.** The dashboard's inbox sorts open work into *Needs you*, *Ready to continue* and *With an agent*, grouped by project.
+- **Answer your agents' questions.** When an agent stops with open questions, answer them in the dashboard. The next agent that picks up the work gets your answers.
+- **No double work.** Resuming a handoff claims it, so two agents don't work on the same task. A claim lasts an hour unless the agent renews it; after that, any agent can continue the work.
+- **Finished means checked.** An agent can only mark work succeeded with evidence for each acceptance criterion, and the outcome stays with the handoff.
+- **Bring your preferences along.** A shared personal memory ("prefers short answers", "uses pnpm") that every connected agent can read and update.
 
 ![Claude Code saves a handoff; Codex resumes its goal, decisions, progress, and next steps](docs/images/how-it-works.svg)
 
-Run Stopover on your computer for local use, or share it privately across your devices with Tailscale. It has no accounts or built-in authentication: anyone who can reach it shares access to all handoffs and personal memories.
+Stopover is a small server with a web dashboard. Agents connect through MCP, the protocol they use to call external tools, so it works with Claude Code, Codex, Cursor, Hermes, OMP and any other MCP client. It runs in one Docker container on your machine, and everything stays in a local SQLite database.
 
 ## Quickstart
 
@@ -19,14 +23,13 @@ You need Git and Docker Engine 28+ with Compose v2, or current Docker Desktop. D
 git clone https://github.com/HiddenVectr/Stopover.git
 cd Stopover
 docker compose up --build -d --wait --wait-timeout 60
-docker compose ps
 ```
 
-Open **http://127.0.0.1:8765**. The start command waits for the service to become healthy. The dashboard starts empty. If it does not open, check `docker compose logs --tail=50 stopover`.
+Open **http://127.0.0.1:8765**. The dashboard starts empty. If it doesn't open, check `docker compose logs --tail=50 stopover`.
 
-## Connect your agent
+## Connect your agents
 
-Choose the command for your agent:
+Add Stopover to each agent you use:
 
 ```sh
 # Claude Code
@@ -36,59 +39,62 @@ claude mcp add --scope user --transport http stopover http://127.0.0.1:8765/mcp
 codex mcp add stopover --url http://127.0.0.1:8765/mcp
 ```
 
-Start a fresh agent session. Ask it:
+Start a fresh session and ask:
 
 > List my Stopover handoffs without claiming any.
 
-An empty successful result confirms the connection. For Cursor, OMP, Hermes, Muse Code, and other MCP clients, see [client setup](docs/clients.md). The dashboard's **Connect your agents** button also shows the server URL and setup commands.
+An empty successful result means it works. For Cursor, OMP, Hermes, Muse Code and other clients, see [client setup](docs/clients.md), or use the dashboard's **Connect your agents** button.
 
-## Save and resume
+## How you use it
 
-In your connected agent, say:
+**1. Save when you stop.** Out of usage, done for the day, or switching machines? In your agent, say:
 
 > Save a handoff so I can continue this conversation later.
 
-The agent saves a summary and gives you a prompt such as `Resume Handoff <id>`. Claude Code and Codex can install [short commands](docs/usage.md#short-commands) such as `/stopover-save` and `$stopover-resume`.
+The agent writes a summary of a paragraph or two plus the details the next agent needs, and replies with a prompt such as `Resume Handoff 9b1bc726-…`. Claude Code and Codex can install [short commands](docs/usage.md#short-commands) such as `/stopover-save` and `$stopover-resume`.
 
-Connect your other agent to the same Stopover server, start a fresh session, and paste the prompt. It claims the handoff and continues using the saved context. You can also copy the prompt from the dashboard.
+**2. Continue in another agent.** Open the other agent and paste the prompt, or copy it from the dashboard. The agent claims the handoff, restates where things stand, and carries on.
 
-![A handoff in the Stopover dashboard, showing its objective, current state, and next steps](docs/images/handoff-detail.png)
+![The Stopover inbox: one handoff needs answers, two are ready to continue, one is with an agent](docs/images/dashboard.png)
 
-The receiving agent needs access to the project files. Stopover saves summaries rather than full transcripts, does not transfer files, and does not start agents for you. A claim helps coordinate work; it cannot prevent an agent from editing files after its claim expires.
+**3. Check the inbox.** The dashboard opens on what to do next. **Needs you** lists handoffs whose agent left questions; **Ready to continue** is work waiting for an agent; **With an agent** is work someone has picked up. Finished work moves to **Done** with its outcome. With nothing selected, **Next up** shows the one thing to look at first.
+
+**4. Answer questions.** Open a handoff in **Needs you**, type your answers and save. They're stored alongside the handoff, never changing what the agent saved, and the next agent to read or resume it gets them.
+
+![A handoff waiting on two questions, with answer boxes and the resume prompt below](docs/images/questions.png)
+
+Each handoff opens with its summary and the prompt to continue it. Next steps follow; the full record (objective, decisions, what was tried, references and history) is folded underneath for when you need it.
+
+### What Stopover doesn't do
+
+- **It doesn't move your files.** The agent that continues needs its own access to the repository and tools.
+- **It doesn't start agents.** Work waits in the inbox until you open an agent and resume it.
+- **A claim isn't a lock.** It tells other agents the work is taken; it can't stop an agent from editing files after its claim expires.
+- **It saves summaries, not transcripts.** A handoff holds what the agent chose to write down. Check that important details made it in before closing the original session.
 
 ## Personal memory
 
-Handoffs carry one task. Personal memory carries what your agents know about *you*, such as “prefers concise answers” or “uses pnpm, not npm”, so a new agent doesn't start from zero. Memories last until you ask an agent to forget them.
-
-To save what an agent knows about you, say:
-
-> Update my Stopover memory.
-
-In another connected agent, say:
-
-> Import my Stopover memory.
-
-Browse saved memories in **Personal memories** on the dashboard, and ask any agent to correct or forget one. See [personal memory](docs/memory.md) for what is saved and how forgetting works.
+Handoffs carry one task. Personal memory carries what your agents know about *you*, so a new agent doesn't start from zero. Say "update my Stopover memory" in one agent and "import my Stopover memory" in another. Browse, correct or forget memories from any agent, and see them all under **Personal memories** in the dashboard. See [personal memory](docs/memory.md) for what's saved and how forgetting works.
 
 ## Keep your data private
 
-The supplied Compose file publishes Stopover on localhost. **Do not expose this deployment to the public internet.** For access from your other devices, use [Tailscale Serve with restricted access rules](docs/remote-http.md).
+Stopover has no accounts or built-in authentication: anyone who can reach it can read and change every handoff and memory. The supplied Compose file listens on localhost only. **Don't expose it to the public internet.** To use it from your other devices, put it behind [Tailscale Serve with access rules](docs/remote-http.md).
 
-Do not save credentials or secrets. Context an agent reads may be sent to that agent's model provider.
+Don't save credentials or secrets in handoffs. Anything an agent reads may be sent to that agent's model provider.
 
-Handoffs and memories survive container restarts in the Docker volume. **`docker compose down -v` deletes that volume.** See [operations](docs/operations.md) for backups, restore, and updates.
+Data survives container restarts in a Docker volume. **`docker compose down -v` deletes it.** See [operations](docs/operations.md) for backups, restore, retention and updates.
 
 ## More information
 
-- [Using Stopover](docs/usage.md): saving, finding and resuming handoffs.
+- [Using Stopover](docs/usage.md): saving, finding, resuming and answering handoffs.
 - [Personal memory](docs/memory.md): sharing your preferences and context between agents.
 - [Client setup](docs/clients.md): commands and configuration for each agent.
-- [API reference](docs/api.md): tool contracts, retries, claims, and pagination.
-- [Operations](docs/operations.md): storage, configuration, backups, and retention.
-- [Tailscale deployment](docs/remote-http.md): private access across devices.
-- [Implementation](docs/implementation.md): how Stopover works inside.
+- [API reference](docs/api.md): tool contracts, claims, answers, retries and the dashboard API.
+- [Operations](docs/operations.md): storage, configuration, backups and retention.
+- [Tailscale deployment](docs/remote-http.md): private access across your devices.
+- [Implementation](docs/implementation.md): how Stopover works inside, and its extension points.
 - [Changelog](CHANGELOG.md): changes and upgrade notes.
-- [Security policy](SECURITY.md): how to report a vulnerability privately, and what Stopover does and doesn't protect.
+- [Security policy](SECURITY.md): reporting a vulnerability, and what Stopover does and doesn't protect.
 
 ## Development
 
@@ -100,7 +106,7 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-On Windows, use executables in `.venv\Scripts\`. See [local development](docs/implementation.md#local-development) for running without Docker and regenerating screenshots.
+On Windows, use the executables in `.venv\Scripts\`. See [local development](docs/implementation.md#local-development) for running without Docker and regenerating screenshots.
 
 Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Stopover is pre-1.0: a minor release can include breaking changes, always marked in the [changelog](CHANGELOG.md), and only the latest release gets fixes.
 

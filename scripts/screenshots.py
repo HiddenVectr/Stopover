@@ -33,7 +33,9 @@ from stopover.sample import sample_record  # noqa: E402
 HANDOFFS = [
     dict(title="Fix refresh-token rotation in the auth service", project_key="acme-api", client="claude-code",
          target=None, objective="Rotate refresh tokens on every use and detect reuse of an old token.",
-         summary="Refresh-token rotation and reuse detection work; next, add the 30-day expiry tests, then document it.",
+         summary="Refresh tokens now rotate on every use, and reusing an old token revokes the whole token family. Mobile "
+                 "tokens expire after 30 days because people sign in on phones less often.\n\nIt stopped before the expiry "
+                 "tests. Next, add tests for expiry and reuse detection, then document the behaviour in docs/auth.md.",
          state="Rotation and reuse detection are implemented. Expiry tests are still missing.",
          decision=("Expire mobile refresh tokens after 30 days", "Mobile users complained about weekly sign-outs."),
          steps=[("expiry-tests", "Add tests for 30-day expiry and reuse detection.", "pytest passes with the new tests."),
@@ -41,7 +43,8 @@ HANDOFFS = [
          criteria=["Reusing a rotated token revokes the whole token family.", "Tests cover expiry and reuse."]),
     dict(title="Migrate the billing worker to the new queue", project_key="acme-api", client="codex", target="claude-code",
          objective="Move the billing worker from the legacy cron to the job queue without double-charging.",
-         summary="The queue consumer is built behind a flag; next, make every charge idempotent before turning off the cron.",
+         summary="The queue consumer is built behind a flag, and the cron stays as a fallback for one release.\n\nNext, "
+                 "make every charge idempotent so a retried job can never charge twice, then turn off the cron.",
          state="The queue consumer exists behind a flag. The cron job still runs in production.",
          decision=("Keep the cron as a fallback for one release", "Rollback must not need a deploy."),
          steps=[("idempotency", "Add an idempotency key to every charge.", "A replayed job never charges twice.")],
@@ -53,6 +56,16 @@ HANDOFFS = [
          decision=("Lazy-load charts below the fold", "Most users never scroll to them."),
          steps=[("split", "Split the chart library into a lazy chunk.", "The initial bundle shrinks by at least 30%.")],
          criteria=["First contentful paint under 1 s in the Lighthouse mobile profile."]),
+    dict(title="Add CSV export to reports", project_key="acme-web", client="codex", target=None,
+         objective="Let people download any report as a CSV file.",
+         summary="The CSV writer streams rows so large reports don't run out of memory, and the export button is on the "
+                 "reports page.\n\nTwo decisions block the last step: which columns to include, and how to format dates.",
+         state="Writer and button done; the column mapping waits on two decisions.",
+         decision=("Stream rows instead of building the file in memory", "Some reports have a million rows."),
+         steps=[("columns", "Map the chosen columns.", "The file contains exactly the agreed columns.")],
+         criteria=["Downloading any report produces a valid CSV."],
+         questions=["Which columns go in the export: everything on screen, or a fixed set?",
+                    "Should dates be in UTC or the viewer's timezone?"]),
     dict(title="Write the release notes for 2.4", project_key="acme-web", client="hermes", target="codex",
          objective="Summarise the 2.4 changes for customers.", state="Draft covers features; fixes are missing.",
          decision=("Group fixes by product area", "Customers scan by area, not by ticket."),
@@ -88,7 +101,7 @@ def record_for(spec) -> dict:
                    background="Synthetic example for Stopover's documentation; not a real project.", constraints=[],
                    decisions=[{"decision": spec["decision"][0], "reason": spec["decision"][1], "evidence_ids": []}],
                    next_steps=[{"id": i, "action": a, "done_when": d} for i, a, d in spec["steps"]],
-                   acceptance_criteria=spec["criteria"], open_questions=[])
+                   acceptance_criteria=spec["criteria"], open_questions=spec.get("questions", []))
     if record["target_client"] is None:
         del record["target_client"]
     return record
@@ -108,10 +121,10 @@ async def populate(url: str):
         for spec in HANDOFFS:
             saved.append(await call("stopover_save", {"operation_id": str(uuid.uuid4()), "record": record_for(spec)}))
             time.sleep(1.1)  # distinct timestamps, so the list order is stable
-        # One handoff in progress, one finished, the rest available.
+        # One handoff with an agent, one asking questions, one finished, the rest ready to continue.
         await call("stopover_resume", {"operation_id": str(uuid.uuid4()), "id": saved[1]["id"], "holder_label": "claude-code"})
-        done = await call("stopover_resume", {"operation_id": str(uuid.uuid4()), "id": saved[3]["id"], "holder_label": "codex"})
-        await call("stopover_complete", {"operation_id": str(uuid.uuid4()), "id": saved[3]["id"], "claim_token": done["claim_token"],
+        done = await call("stopover_resume", {"operation_id": str(uuid.uuid4()), "id": saved[4]["id"], "holder_label": "codex"})
+        await call("stopover_complete", {"operation_id": str(uuid.uuid4()), "id": saved[4]["id"], "claim_token": done["claim_token"],
                                       "completion": {"outcome": "succeeded", "summary": "Release notes drafted with all fixes.",
                                                      "acceptance_results": [{"index": 0, "result": "pass",
                                                                              "evidence": "Checked against the 2.4 milestone."}]}})
@@ -128,7 +141,7 @@ async def populate(url: str):
 SHOWN = "http://127.0.0.1:8765"
 
 
-def capture(base: str, first_id: str):
+def capture(base: str, first_id: str, asking_id: str):
     OUT.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -149,6 +162,9 @@ def capture(base: str, first_id: str):
         open_list(page, f"/handoffs/{first_id}")
         page.wait_for_function("!document.querySelector('#detail .empty-detail')", timeout=15000)
         page.screenshot(path=OUT / "handoff-detail.png")
+        open_list(page, f"/handoffs/{asking_id}")
+        page.wait_for_selector("#detail .question-card", timeout=15000)
+        page.screenshot(path=OUT / "questions.png")
         page.goto(SHOWN + "/memories/communication.response_length")
         page.wait_for_selector("#memory-list button", timeout=15000)
         page.wait_for_function("!document.querySelector('#memory-detail .empty-detail')", timeout=15000)
@@ -177,7 +193,7 @@ def main():
                 except OSError:
                     time.sleep(0.1)
             saved = asyncio.run(populate(base + "/mcp"))
-            capture(base, saved[0]["id"])
+            capture(base, saved[0]["id"], saved[3]["id"])
         finally:
             server.terminate()
             server.wait(timeout=10)

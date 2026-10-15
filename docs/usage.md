@@ -35,6 +35,8 @@ The dashboard opens on the **Inbox**: open work, sorted by what to do next.
 
 Finished handoffs move to **Done**. Within each section, handoffs are grouped under their project when there are several; select a project to show only that one. Search covers every handoff. With nothing selected, the right-hand side shows **Next up**: the first handoff waiting on you, or the next one ready to continue.
 
+![A handoff opened from the inbox: its summary, the prompt to continue it, and next steps](images/handoff-detail.png)
+
 Select a handoff to open it. The top shows its status, who saved it, the summary, and **Continue in another agent** with the `Resume Handoff <id>` prompt to copy. If the agent left questions, **Questions for you** comes first: type an answer and select **Save answer**. Answers never change the saved record; the next agent to read or resume the handoff gets them alongside it, even after the original session has ended. Next steps follow, and the rest of the record (objective, decisions, background, references, activity and the full JSON) is folded under **Details** and **Record & history**. The **⋯** menu has Copy full record, Copy ID and **Delete**, which removes the handoff with its answers and history (it asks first, and warns you if an agent has it). The dashboard refreshes every 15 seconds.
 
 For a clearly labeled example, run `docker exec stopover python -m stopover seed-demo`. The app does not create examples automatically.
