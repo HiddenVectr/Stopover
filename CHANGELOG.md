@@ -6,6 +6,10 @@ to update. Patch releases (0.x.y) don't break anything.
 
 ## Unreleased
 
+## 0.19.0 — 2026-10-17
+
+- Hosts can show a getting-started checklist above the dashboard inbox: add `checklist` to `/api/session` with an `id`, a `title` and `items` of `label`, optional `detail`, `done` and optional `action` (`"connect"` puts a **Connect your agents** button on the next step). It shows progress and marks the next step; the person can hide it, which this browser remembers for that `id`. On phones it moves out of the way while a handoff is open.
+
 ## 0.18.0 — 2026-10-14
 
 - Dashboard: a calmer inbox built around the main flow. It opens on **Inbox**, with **Needs you**, **Ready to continue** and **With an agent** sections; finished work moves to **Done**. Rows show a badge only when it adds something (questions waiting, which agent has it), a two-line preview and one line of details. Projects are small labels within each section; select one to filter. The project and recipient dropdowns, the Refresh button and the workspace count are gone, and search is a compact field. With nothing selected, the right-hand side shows **Next up**.

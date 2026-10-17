@@ -233,7 +233,11 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
                                        {"label": "Elsewhere", "url": "https://evil.example/"}, {"label": "Protocol", "url": "//evil.example"}],
                              "usage": {"title": "Free plan", "url": "/settings/tokens#plan", "items": [
                                  {"label": "Changes today", "used": 200, "limit": 200}, {"label": "Saved handoffs", "used": 12, "limit": 50},
-                                 {"label": "Memories", "used": 3, "limit": None}, {"label": "Broken", "used": "x"}]}})
+                                 {"label": "Memories", "used": 3, "limit": None}, {"label": "Broken", "used": "x"}]},
+                             "checklist": {"id": "first-run", "title": "Get started", "items": [
+                                 {"label": "Connect an agent", "detail": "Add the URL.", "done": True},
+                                 {"label": "Save a handoff", "done": False, "action": "connect"},
+                                 {"label": "<b>Continue</b>", "done": False}, {"done": True}]}})
 
     app = create_app(tmp_path, auth=auth, login_url="/fake-login", extra_routes=[
         Route("/fake-login", login), Route("/fake-login/complete", complete),
@@ -273,6 +277,26 @@ def test_dashboard_redirects_to_host_login_and_shows_the_session(tmp_path, recor
             expect(usage).to_contain_text("38 of 50 left")
             expect(usage).to_contain_text("No limit")
             expect(usage.get_by_role("link", name="Details")).to_have_attribute("href", "/settings/tokens#plan")
+            # A host checklist: progress, the next step marked (its action only there), text never parsed as HTML.
+            checklist = page.locator("#host-checklist")
+            expect(checklist.locator(".checklist-step")).to_have_count(3)
+            expect(checklist).to_contain_text("1 of 3 done")
+            expect(checklist.locator(".checklist-step.done")).to_have_text("✓Connect an agentAdd the URL.")
+            expect(checklist.locator(".checklist-step.next")).to_contain_text("Save a handoff")
+            expect(checklist.get_by_role("button", name="Connect your agents")).to_have_count(1)
+            expect(checklist).to_contain_text("<b>Continue</b>")
+            checklist.get_by_role("button", name="Connect your agents").click()
+            expect(page.locator("#setup-dialog")).to_be_visible()
+            page.get_by_role("button", name="Close connection instructions").click()
+            # Hiding it is remembered across reloads.
+            checklist.get_by_role("button", name="Hide").click()
+            expect(checklist).to_be_hidden()
+            page.reload()
+            expect(page.locator("#workspace-name")).to_have_text("Alice's workspace")
+            expect(checklist).to_be_hidden()
+            page.evaluate("localStorage.removeItem('stopover.checklist.hidden')")
+            page.reload()
+            expect(checklist).to_be_visible()
             # Phones: account links and Sign out sit behind the account button, not in the top bar.
             page.set_viewport_size({"width": 390, "height": 844})
             expect(page.locator("#host-links")).to_be_hidden()

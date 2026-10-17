@@ -776,6 +776,44 @@ function renderUsage(box, usage) {
   }
 }
 
+// A host can offer getting-started steps in /api/session as checklist: {id, title, items: [{label, detail?, done,
+// action? ('connect' opens the connection steps)}]}. It shows above the inbox until the person hides it; hiding is
+// remembered per checklist id in this browser.
+const CHECKLIST_KEY = 'stopover.checklist.hidden';
+function checklistHidden(id) { try { return localStorage.getItem(CHECKLIST_KEY) === id; } catch { return false; } }
+function renderChecklist(box, checklist) {
+  const items = Array.isArray(checklist?.items) ? checklist.items.filter((item) => item && typeof item.label === 'string') : [];
+  const id = typeof checklist?.id === 'string' ? checklist.id : 'checklist';
+  box.hidden = !items.length || checklistHidden(id);
+  if (box.hidden) return box.replaceChildren();
+  const done = items.filter((item) => item.done === true).length;
+  const head = el('div', 'checklist-head');
+  const title = el('h2', '', typeof checklist.title === 'string' ? checklist.title : 'Get started');
+  title.id = 'checklist-title';
+  const progress = el('span', '', done === items.length ? 'All done' : `${done} of ${items.length} done`);
+  const hide = button(done === items.length ? 'Dismiss' : 'Hide', 'copy-small', () => {
+    try { localStorage.setItem(CHECKLIST_KEY, id); } catch { /* storage unavailable: hide until reload */ }
+    box.hidden = true;
+  });
+  const end = el('div', 'checklist-actions');
+  end.append(progress, ' ', hide);
+  head.append(title, end);
+  const steps = el('ol', 'checklist-steps');
+  const next = items.findIndex((item) => item.done !== true);
+  items.forEach((item, index) => {
+    const li = el('li', 'checklist-step' + (item.done === true ? ' done' : index === next ? ' next' : ''));
+    li.append(el('span', 'checklist-mark', item.done === true ? '✓' : index + 1));
+    const text = el('div');
+    text.append(el('strong', '', item.label));
+    if (typeof item.detail === 'string') text.append(el('span', '', item.detail));
+    if (index === next && item.action === 'connect') text.append(button('Connect your agents', 'button secondary', () => $('setup-dialog').showModal()));
+    li.append(text);
+    if (item.done === true) li.setAttribute('aria-label', `Done: ${item.label}`);
+    steps.append(li);
+  });
+  box.replaceChildren(head, steps);
+}
+
 // Hosts that add accounts can describe the signed-in user at /api/session; plain Stopover answers 404.
 async function loadSession() {
   try {
@@ -791,6 +829,7 @@ async function loadSession() {
     $('host-links').replaceChildren(...links.map((link) => { const a = el('a', '', link.label); a.href = link.url; return a; }));
     $('host-links').hidden = !links.length;
     renderUsage($('host-usage'), session.usage);
+    renderChecklist($('host-checklist'), session.checklist);
     updateAuthUI();
   } catch { /* optional */ }
 }
